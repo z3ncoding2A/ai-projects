@@ -1,0 +1,57 @@
+{
+  "security": {
+    "auth": {
+      "selectedType": "oauth-personal"
+    },
+    "enablePermanentToolApproval": true
+  },
+  "general": {
+    "preferredEditor": "vscodium",
+    "defaultApprovalMode": "auto_edit",
+    "enableNotifications": true,
+    "plan": {
+      "modelRouting": true
+    }
+  },
+  "model": {
+    "name": "auto-gemini-2.5"
+  },
+  "ui": {
+    "autoThemeSwitching": false,
+    "hideWindowTitle": true,
+    "inlineThinkingMode": "off",
+    "footer": {
+      "hideContextPercentage": false,
+      "showLabels": true,
+      "items": [
+        "workspace",
+        "model-name",
+        "quota",
+        "token-count",
+        "context-used",
+        "memory-usage",
+        "sandbox"
+      ]
+    },
+    "showMemoryUsage": true,
+    "loadingPhrases": "all",
+    "errorVerbosity": "full"
+  },
+  "output": {
+    "format": "json"
+  },
+  "ide": {
+    "enabled": false
+  },
+  "billing": {
+    "overageStrategy": "ask"
+  },
+  "tools": {
+    "shell": {
+      "showColor": true
+    }
+  },
+  "experimental": {
+    "modelSteering": true
+  }
+}

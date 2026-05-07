@@ -1,0 +1,42 @@
+# Gemini Project Context
+
+This file contains project-specific instructions and context for Gemini interactions within this directory.
+
+## Directory Overview
+
+This directory (`Hyprland(HyDE-Project)`) is a comprehensive collection of user configuration files (dotfiles) for a Linux desktop environment. It specifically focuses on a customized setup using **Hyprland** (a dynamic tiling Wayland compositor) structured around the **HyDE Project** (Hyprland Desktop Environment). The directory acts as a backup or a central repository for the user's personal dotfiles, encompassing settings for the window manager, status bar, app launchers, terminal emulators, and various user applications.
+
+## Key Directories and Files
+
+*   **`hypr/`**: Contains the core configuration for the Hyprland window manager.
+    *   `hypr/hyprland.conf`: The main entry point for Hyprland configuration, which sources other files.
+    *   `hypr/keybindings.conf`: Defines custom keyboard shortcuts.
+    *   `hypr/windowrules.conf`: Rules for window management and behaviors.
+    *   `hypr/userprefs.conf`: User-specific overrides for Hyprland settings.
+*   **`hyde/`**: Specific configuration for the HyDE project ecosystem.
+    *   `hyde/config.toml`: General settings and parameters for the HyDE setup.
+    *   `hyde/themes/`: Stores theme-specific files and configurations.
+*   **`waybar/`**: Configuration for Waybar, the status bar used in this setup.
+*   **`rofi/`**: Configuration for Rofi, an application launcher and window switcher.
+*   **`kitty/`**: Settings for the Kitty terminal emulator.
+*   **`zsh/`** & **`zshrc.conf`**: Configuration for the Z shell (zsh) environment, aliases, and plugins.
+*   **`dunst/`**: Configuration for the Dunst notification daemon.
+*   **`cfg_backups/`**: Stores timestamped backups of configurations (e.g., specific theme snapshots like Catppuccin, Tokyo Night).
+*   **App Configs (`discord`, `chromium`, `vlc`, `sublime-text`, etc.)**: Preferences and application data for various user programs.
+
+## Usage
+
+This directory is intended to be used as a reference or a source of truth for the user's system configuration. When interacting within this workspace:
+
+1.  **Configuration Editing:** Ensure changes to window manager rules or theme files respect the split configuration structure (e.g., editing `hypr/userprefs.conf` instead of overwriting core HyDE defaults in `hypr/hyprland.conf` if applicable).
+2.  **Environment Backup/Restore:** The structure largely mirrors `~/.config`, so modifications here are typically meant to be synced back to the user's actual config folder to take effect.
+3.  **Theming and Customization:** Changes related to UI, colors, or system appearance should ideally target the specific `hyde/themes` or the relevant application config files.
+
+## Guidelines
+
+*   **Managed Files:** Pay attention to headers like `#! Do not remove - HyDE marker to prevent file overwrite` which indicate managed files that shouldn't have their headers removed.
+*   **Modular Configs:** Main configs like `hypr/hyprland.conf` dynamically source modular configuration files (`keybindings.conf`, `windowrules.conf`). Make surgical edits to the appropriate sub-files rather than centralizing everything.
+
+## Active Tasks / Todo
+<!-- Keep track of current objectives or roadmap items for customizing the dotfiles -->
+- Maintain structural integrity of HyDE ecosystem while assisting with customization.

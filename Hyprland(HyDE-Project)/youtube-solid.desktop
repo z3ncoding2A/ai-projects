@@ -1,0 +1,11 @@
+#!/usr/bin/env xdg-open
+[Desktop Entry]
+Version=1.0
+Terminal=false
+Type=Application
+Name=YouTube
+Comment=YouTube Solid Platform
+Exec=/home/z3ncoding123/.local/bin/youtube-app
+Icon=chrome-agimnkijcaahngcdmfeangaknmldooml-Default
+StartupWMClass=crx_agimnkijcaahngcdmfeangaknmldooml
+Categories=Network;WebBrowser;
