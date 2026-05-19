@@ -11,8 +11,8 @@ CONFIG_FILE = os.path.join(CONFIG_DIR, "config.json")
 # Default configuration
 DEFAULT_CONFIG = {
     "voice": "en-GB-SoniaNeural",
-    "rate_multiplier": 1.0,  # e.g., 1.05 for +5%, 0.95 for -5%
-    "volume": 1.0,
+    "rate_multiplier": 1.35,  # e.g., 1.05 for +5%, 0.95 for -5%
+    "volume": 1.25,
     "_available_female_uk_voices_info": [
         "en-GB-SoniaNeural  (Very clear and professional)",
         "en-GB-LibbyNeural  (Slightly deeper and formal)",
@@ -115,6 +115,11 @@ async def main():
 
     if not text:
         return
+
+    # Clean text to remove common syntax characters (like asterisks, markdown, brackets)
+    # so the TTS doesn't read them out loud ("asterisk", "left bracket", etc.)
+    import re
+    text = re.sub(r'[*_`~#\[\]<>{}]', '', text)
 
     kill_previous()
 

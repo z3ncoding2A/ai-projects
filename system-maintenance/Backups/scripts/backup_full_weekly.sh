@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Configuration
-BACKUP_DIR="/mnt/1/full_system_backups"
+BACKUP_DIR="/mnt/full_system_backups"
 MAX_BACKUPS=4 # 4 weekly restore points
 EXCLUDES=(
     "/dev/*"

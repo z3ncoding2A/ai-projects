@@ -1,12 +1,29 @@
 #!/bin/bash
 
 # Configuration
-BACKUP_DIR="/mnt/1/home_backups"
+BACKUP_DIR="/mnt/home_backups"
 MAX_BACKUPS=3
+EXCLUDES=(
+    ".cache/*"
+    ".local/share/Trash/*"
+	".mozilla/firefox/*/cache/*
+	"Music/"
+	".pcloud/"
+	"pCloudDrive/"
+	".git"
+	".bash_history"
+	"Applications/*"
+	"webui-venv"
+	".lmstudio"
+	".zsh_history"
+	"Porn/*"
+	""
+)
+
+
 EXCLUDES=(
     ".cache/"
     ".local/share/Trash/"
-    "Downloads/"
     "pCloudDrive/"
     ".npm/"
     ".pcloud/"
@@ -24,7 +41,11 @@ EXCLUDES=(
     ".venv/"
 	"Applications"
 	"webui-venv"
+	".lmstudio"
 )
+
+
+
 
 # Create backup directory if it doesn't exist
 mkdir -p "$BACKUP_DIR" || { echo "Error: Could not create backup directory $BACKUP_DIR"; exit 1; }

@@ -1,12 +1,11 @@
 #!/bin/bash
 
 # Configuration
-BACKUP_DIR="/mnt/1/home_backups"
+BACKUP_DIR="/mnt/home_backups"
 MAX_BACKUPS=3
 EXCLUDES=(
     ".cache/"
     ".local/share/Trash/"
-    "Downloads/"
     "pCloudDrive/"
     ".npm/"
     ".pcloud/"
@@ -22,9 +21,9 @@ EXCLUDES=(
     "build/"
     "venv/"
     ".venv/"
-	"~/Applications"
-	"/home/z3ncoding123/Applications"
-	"~/webui-venv"
+	"Applications"
+	"webui-venv"
+	".lmstudio"
 )
 
 # Create backup directory if it doesn't exist

@@ -15,6 +15,7 @@ EXCLUDES=(
     "/var/cache/*" # Can be very large, generally safe to exclude for system rollback
     "/var/log/*"   # Can be very large, generally safe to exclude for system rollback
     "/lost+found"
+	"/home/*"
     "/home/z3ncoding123/.gemini/projects/system-maintenance/Backups/*" # Exclude backup scripts and data
     "/home/z3ncoding123/.gemini/tmp/*" # Exclude gemini's temporary directory
 )
