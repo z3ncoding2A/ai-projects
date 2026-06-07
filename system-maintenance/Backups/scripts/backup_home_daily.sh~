@@ -8,12 +8,12 @@ EXCLUDES=(
     ".local/share/Trash/"
     "pCloudDrive/"
     ".npm/"
+    ".rustup"
     ".pcloud/"
     ".cargo/registry/"
     ".git/"
     ".bash_history"
     ".zsh_history"
-    "Porn/"
     "tmp/"
     "temp/"
     "node_modules/"
@@ -21,10 +21,15 @@ EXCLUDES=(
     "build/"
     "venv/"
     ".venv/"
-	"Applications"
+	"Applications/*"
 	"webui-venv"
-	".lmstudio"
+	".lmstudio/*"
+	"virtual-machines/*"
+	"opt/*"
 )
+
+
+
 
 # Create backup directory if it doesn't exist
 mkdir -p "$BACKUP_DIR" || { echo "Error: Could not create backup directory $BACKUP_DIR"; exit 1; }
@@ -62,4 +67,3 @@ fi
 echo "Performing backup rotation. Keeping last $MAX_BACKUPS days."
 find "$BACKUP_DIR" -maxdepth 1 -type d -name "*-*-*" | sort -r | tail -n +$((MAX_BACKUPS + 1)) | xargs -r rm -rf
 
-echo "Daily $HOME backup script finished."

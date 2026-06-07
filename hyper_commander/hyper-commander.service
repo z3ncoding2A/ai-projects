@@ -1,0 +1,24 @@
+[Unit]
+Description=Hyper Commander Voice Assistant
+Documentation=https://github.com/your-repo/hyper_commander
+# Wait for the graphical session and audio to be ready
+After=graphical-session.target pipewire.service
+Wants=pipewire.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/z3ncoding123/.gemini/projects/hyper_commander
+# Read the API key from a .env file securely
+EnvironmentFile=/home/z3ncoding123/.gemini/projects/hyper_commander/.env
+# Execute using the virtual environment's python
+ExecStart=/home/z3ncoding123/.gemini/projects/hyper_commander/venv/bin/python /home/z3ncoding123/.gemini/projects/hyper_commander/main.py
+# Automatically restart if it crashes (e.g., audio device drops)
+Restart=on-failure
+RestartSec=5
+# Output logs to journalctl
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
+WantedBy=graphical-session.target

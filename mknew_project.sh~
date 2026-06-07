@@ -1,0 +1,120 @@
+#!/usr/bin/bash
+
+# Define target project name
+export PROJ_NAME="gemini-cli-project"
+export PROJ_DIR="$(pwd)/${PROJ_NAME}"
+
+# Create robust directory structure
+mkdir -p "${PROJ_DIR}"/{src,config,tests}
+
+# Generate configuration templates and code files
+cat << 'EOF' > "${PROJ_DIR}/requirements.txt"
+google-genai>=0.1.1
+python-dotenv>=1.0.1
+EOF
+
+cat << 'EOF' > "${PROJ_DIR}/config/settings.json"
+{
+  "model": "gemini-2.5-flash",
+  "generation_config": {
+    "temperature": 0.7,
+    "top_p": 0.95,
+    "top_k": 40,
+    "max_output_tokens": 2048
+  }
+}
+EOF
+
+cat << 'EOF' > "${PROJ_DIR}/.env.example"
+# Get your API key from Google AI Studio: https://aistudio.google.com/
+GEMINI_API_KEY=your_api_key_here
+EOF
+
+# Copy example environment file
+cp "${PROJ_DIR}/.env.example" "${PROJ_DIR}/.env"
+if [ -n "${GEMINI_API_KEY}" ]; then
+    sed -i "s/GEMINI_API_KEY=your_api_key_here/GEMINI_API_KEY=${GEMINI_API_KEY}/" "${PROJ_DIR}/.env"
+fi
+
+cat << 'EOF' > "${PROJ_DIR}/src/cli.py"
+#!/usr/bin/env python3
+import os
+import sys
+import json
+import argparse
+from pathlib import Path
+from google import genai
+from dotenv import load_dotenv
+
+# Global client
+client = None
+
+def setup_environment():
+    global client
+    # Load .env file relative to this script
+    base_dir = Path(__file__).resolve().parent.parent
+    load_dotenv(base_dir / '.env')
+    
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key or api_key == "your_api_key_here":
+        print("[!] Error: GEMINI_API_KEY not configured in .env", file=sys.stderr)
+        sys.exit(1)
+    client = genai.Client(api_key=api_key)
+
+def load_config():
+    base_dir = Path(__file__).resolve().parent.parent
+    config_path = base_dir / 'config' / 'settings.json'
+    with open(config_path, 'r') as f:
+        return json.load(f)
+
+def generate_response(prompt: str):
+    config = load_config()
+    try:
+        response = client.models.generate_content(
+            model=config.get("model", "gemini-2.5-flash"),
+            contents=prompt,
+            config=config.get("generation_config")
+        )
+        return response.text
+    except Exception as e:
+        print(f"[!] API Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+def main():
+    parser = argparse.ArgumentParser(description="Gemini CLI Interface")
+    parser.add_argument("prompt", type=str, nargs="+", help="The prompt to send to Gemini")
+    args = parser.parse_args()
+    
+    setup_environment()
+    prompt_str = " ".join(args.prompt)
+    
+    print("[*] Contacting Gemini API...")
+    result = generate_response(prompt_str)
+    print("\n" + result)
+
+if __name__ == "__main__":
+    main()
+EOF
+
+# Ensure executable permissions on the CLI wrapper
+chmod +x "${PROJ_DIR}/src/cli.py"
+
+# Initialize local python virtual environment
+python3 -m venv "${PROJ_DIR}/.venv"
+source "${PROJ_DIR}/.venv/bin/activate"
+pip install --upgrade pip
+pip install -r "${PROJ_DIR}/requirements.txt"
+
+# Output project blueprint structure
+echo "======================================================================"
+echo "[+] Gemini CLI project directory successfully created at:"
+echo "    ${PROJ_DIR}"
+echo "======================================================================"
+tree "${PROJ_DIR}" || ls -R "${PROJ_DIR}"
+echo "======================================================================"
+echo "To test/run your new project:"
+echo "1. Run: cd ${PROJ_DIR}"
+echo "2. Edit: .env  (and add your actual GEMINI_API_KEY)"
+echo "3. Run: source .venv/bin/activate"
+echo "4. Run: python src/cli.py Explain Arch Linux in one sentence"
+echo "======================================================================"

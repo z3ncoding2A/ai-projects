@@ -362,7 +362,7 @@ def write_html_grid(all_videos, filename, saved_categories):
             remote_thumb # Index 11
         ])
 
-    # Optimized dynamic HTML template
+    # Optimized dynamic HTML template - Cinematic Dark Redesign
     html_start = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -370,130 +370,241 @@ def write_html_grid(all_videos, filename, saved_categories):
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="referrer" content="no-referrer">
     <title>z3ncoding Video Library ({len(all_videos)})</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {{
-            --bg-color: #0a0a0a;
-            --card-bg: #161616;
-            --text-color: #efefef;
-            --accent-color: #ff9000;
-            --secondary-text: #888;
-            --border-color: #333;
-            --hover-shadow: rgba(255, 144, 0, 0.25);
-            --least-color: #555;
-            --average-color: #3498db;
-            --most-color: #e74c3c;
-            --public-color: #2ecc71;
+            --bg-base: #050505;
+            --bg-surface: #121212;
+            --bg-surface-hover: #1e1e1e;
+            --text-primary: #f0f0f0;
+            --text-secondary: #a0a0a0;
+            --accent-primary: #e50914; /* Cinematic Red */
+            --accent-hover: #ff0f1a;
+            --border-color: #2a2a2a;
+            
+            --cat-public: #2ecc71;
+            --cat-least: #95a5a6;
+            --cat-avg: #3498db;
+            --cat-most: #f39c12;
+            
+            --sidebar-width: 250px;
         }}
+
+        * {{ box-sizing: border-box; }}
 
         body {{
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-base);
+            color: var(--text-primary);
             margin: 0;
             padding: 0;
-            line-height: 1.5;
+            display: flex;
+            min-height: 100vh;
+            overflow-x: hidden;
         }}
 
-        header {{
-            position: sticky;
-            top: 0;
-            background-color: rgba(10, 10, 10, 0.95);
-            backdrop-filter: blur(10px);
-            z-index: 1000;
-            padding: 8px 10px;
-            border-bottom: 1px solid var(--border-color);
-        }}
-        .header-content {{
-            max-width: 1600px;
-            margin: 0 auto;
+        /* --- Sidebar Navigation --- */
+        .sidebar {{
+            width: var(--sidebar-width);
+            background-color: var(--bg-surface);
+            border-right: 1px solid var(--border-color);
+            position: fixed;
+            height: 100vh;
             display: flex;
             flex-direction: column;
-            align-items: center;
-            gap: 6px;
+            z-index: 100;
         }}
-        h1 {{
+
+        .sidebar-header {{
+            padding: 24px 20px;
+            border-bottom: 1px solid var(--border-color);
+        }}
+
+        .sidebar-header h1 {{
             margin: 0;
-            color: var(--accent-color);
             font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--text-primary);
             letter-spacing: -0.5px;
         }}
-        .category-tabs {{
-            display: flex;
-            gap: 8px;
-            flex-wrap: nowrap;
-            overflow-x: auto;
-            width: 100%;
-            justify-content: center;
-            padding-bottom: 4px;
-            scrollbar-width: none;
+        .sidebar-header span {{
+            color: var(--accent-primary);
         }}
-        .category-tabs::-webkit-scrollbar {{ display: none; }}
 
-        .tab-btn {{
-            padding: 4px 12px;
+        .nav-links {{
+            flex: 1;
+            padding: 20px 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }}
+
+        .nav-btn {{
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            text-align: left;
+            padding: 12px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.95rem;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            position: relative;
+        }}
+
+        .nav-btn:hover {{
+            background-color: rgba(255, 255, 255, 0.05);
+            color: var(--text-primary);
+        }}
+
+        .nav-btn.active {{
+            background-color: rgba(229, 9, 20, 0.1);
+            color: var(--accent-primary);
+            font-weight: 600;
+        }}
+        .nav-btn.active::before {{
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 10%;
+            height: 80%;
+            width: 4px;
+            background-color: var(--accent-primary);
+            border-radius: 0 4px 4px 0;
+        }}
+
+        .sidebar-footer {{
+            padding: 20px;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }}
+
+        .action-btn {{
             background: #222;
             border: 1px solid var(--border-color);
-            border-radius: 20px;
-            color: var(--secondary-text);
+            color: var(--text-secondary);
+            padding: 8px 12px;
+            border-radius: 6px;
             cursor: pointer;
-            font-size: 0.75rem;
+            font-size: 0.85rem;
             transition: all 0.2s;
-            white-space: nowrap;
         }}
-        .tab-btn:hover {{ background: #333; color: white; }}
-        .tab-btn.active {{
-            background: var(--accent-color);
-            color: black;
-            border-color: var(--accent-color);
-            font-weight: bold;
+        .action-btn:hover {{ background: #333; color: white; }}
+        .btn-export:hover {{ border-color: #2ecc71; color: #2ecc71; }}
+        .btn-blacklist:hover {{ border-color: #e74c3c; color: #e74c3c; }}
+        .btn-connect:hover {{ border-color: #3498db; color: #3498db; }}
+        .btn-connect.connected {{ border-color: #2ecc71; color: #2ecc71; background: rgba(46, 204, 113, 0.1); }}
+
+        .sync-status {{
+            font-size: 0.75rem;
+            padding: 6px 10px;
+            border-radius: 6px;
+            text-align: center;
+            transition: all 0.3s;
+        }}
+        .sync-status.disconnected {{
+            background: rgba(231, 76, 60, 0.1);
+            color: #e74c3c;
+        }}
+        .sync-status.connected {{
+            background: rgba(46, 204, 113, 0.1);
+            color: #2ecc71;
+        }}
+        .sync-status.saving {{
+            background: rgba(52, 152, 219, 0.1);
+            color: #3498db;
         }}
 
-        .toolbar {{
+        /* --- Main Content Area --- */
+        .main-wrapper {{
+            flex: 1;
+            margin-left: var(--sidebar-width);
             display: flex;
-            gap: 8px;
-            width: 100%;
-            max-width: 900px;
+            flex-direction: column;
+            min-width: 0; /* Important for flex child truncating */
+        }}
+
+        /* Top Bar */
+        .top-bar {{
+            position: sticky;
+            top: 0;
+            background-color: rgba(5, 5, 5, 0.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            z-index: 90;
+            padding: 16px 32px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            display: flex;
+            justify-content: space-between;
             align-items: center;
+            gap: 20px;
+        }}
+
+        .search-container {{
+            flex: 1;
+            max-width: 600px;
+            position: relative;
         }}
 
         #search-input {{
-            flex-grow: 1;
-            padding: 6px 12px;
-            background-color: #222;
-            border: 1px solid var(--border-color);
-            border-radius: 25px;
+            width: 100%;
+            padding: 12px 20px;
+            background-color: rgba(255, 255, 255, 0.08);
+            border: 1px solid transparent;
+            border-radius: 30px;
             color: white;
-            font-size: 0.8rem;
+            font-size: 0.95rem;
             outline: none;
-            min-width: 0;
+            transition: all 0.2s;
         }}
-        #search-input:focus {{ border-color: var(--accent-color); box-shadow: 0 0 8px var(--hover-shadow); }}
+        #search-input:focus {{
+            background-color: rgba(255, 255, 255, 0.12);
+            border-color: rgba(255, 255, 255, 0.2);
+            box-shadow: 0 0 0 3px rgba(229, 9, 20, 0.1);
+        }}
+        #search-input::placeholder {{ color: #777; }}
+
+        .top-controls {{
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }}
 
         select#sort-select {{
-            padding: 6px 10px;
-            background-color: #222;
+            padding: 10px 16px;
+            background-color: var(--bg-surface);
             border: 1px solid var(--border-color);
-            border-radius: 25px;
-            color: white;
-            font-size: 0.8rem;
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 0.9rem;
             cursor: pointer;
-            appearance: none;
+            outline: none;
         }}
 
-        .stats {{ font-size: 0.75rem; color: var(--secondary-text); }}
+        .stats {{
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            white-space: nowrap;
+        }}
 
-        .main-container {{ max-width: 1600px; margin: 0 auto; padding: 15px 10px; }}
+        /* Grid */
+        .content-area {{
+            padding: 32px;
+            flex: 1;
+        }}
 
         .grid {{
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 20px;
-            min-height: 500px;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 24px;
         }}
 
+        /* Video Card */
         .video-card {{
-            background-color: var(--card-bg);
-            border: 1px solid var(--border-color);
+            background-color: var(--bg-surface);
             border-radius: 12px;
             overflow: hidden;
             display: flex;
@@ -501,21 +612,24 @@ def write_html_grid(all_videos, filename, saved_categories):
             text-decoration: none;
             color: inherit;
             position: relative;
-            content-visibility: auto;
-            contain-intrinsic-size: 300px 400px;
+            transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.3s ease;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            border: 1px solid transparent;
         }}
 
         .video-card:hover {{
-            transform: translateY(-5px);
-            box-shadow: 0 10px 20px rgba(0,0,0,0.5), 0 0 15px var(--hover-shadow);
-            border-color: var(--accent-color);
+            transform: translateY(-8px) scale(1.02);
+            box-shadow: 0 15px 30px rgba(0,0,0,0.6);
+            border-color: rgba(255,255,255,0.1);
+            z-index: 10;
         }}
 
         .thumbnail-wrapper {{
             position: relative;
             width: 100%;
-            padding-top: 56.25%;
+            padding-top: 56.25%; /* 16:9 Aspect Ratio */
             background-color: #000;
+            overflow: hidden;
         }}
 
         .thumbnail {{
@@ -523,6 +637,7 @@ def write_html_grid(all_videos, filename, saved_categories):
             top: 0; left: 0;
             width: 100%; height: 100%;
             object-fit: cover;
+            transition: opacity 0.3s ease;
         }}
 
         .preview-img {{
@@ -537,129 +652,225 @@ def write_html_grid(all_videos, filename, saved_categories):
         }}
 
         .thumbnail-wrapper:hover .preview-img {{ opacity: 1; }}
+        .thumbnail-wrapper:hover .thumbnail {{ opacity: 0.3; }}
 
         .duration {{
             position: absolute;
             bottom: 8px; right: 8px;
-            background-color: rgba(0, 0, 0, 0.8);
+            background-color: rgba(0, 0, 0, 0.85);
             color: white;
-            padding: 2px 6px;
+            padding: 3px 8px;
             border-radius: 4px;
             font-size: 0.75rem;
-            font-weight: bold;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            z-index: 6;
         }}
 
-        .video-info {{ padding: 15px; flex-grow: 1; display: flex; flex-direction: column; }}
+        .video-info {{
+            padding: 16px;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }}
 
         .video-title {{
-            font-size: 0.95rem; font-weight: 600;
-            margin-bottom: 10px; line-height: 1.4;
-            height: 2.8em; overflow: hidden;
-            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 12px;
+            line-height: 1.4;
+            height: 2.8em;
+            overflow: hidden;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            color: var(--text-primary);
         }}
 
         .video-meta {{
-            font-size: 0.8rem; color: var(--secondary-text);
-            margin-top: auto; display: flex;
-            justify-content: space-between; align-items: center;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }}
 
+        /* Categorization Overlay */
         .category-actions {{
-            display: flex; gap: 5px; padding: 10px 15px;
-            background: rgba(0,0,0,0.3); border-top: 1px solid #222;
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: rgba(18, 18, 18, 0.95);
+            backdrop-filter: blur(4px);
+            padding: 12px;
+            display: flex;
+            gap: 6px;
+            transform: translateY(100%);
+            transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+            border-top: 1px solid rgba(255,255,255,0.05);
+            z-index: 20;
+        }}
+
+        .video-card:hover .category-actions {{
+            transform: translateY(0);
         }}
 
         .cat-btn {{
-            flex: 1; padding: 5px; border: none; border-radius: 4px;
-            font-size: 0.7rem; cursor: pointer; font-weight: bold;
-            display: flex; align-items: center; justify-content: center;
+            flex: 1;
+            padding: 6px 0;
+            border: none;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            color: white;
+            transition: filter 0.2s, transform 0.1s;
         }}
-        .btn-public {{ background: var(--public-color); color: white; }}
-        .btn-least {{ background: var(--least-color); color: white; }}
-        .btn-avg {{ background: var(--average-color); color: white; }}
-        .btn-most {{ background: var(--most-color); color: white; }}
-        .btn-reset {{ background: #333; color: #888; }}
-        .btn-delete {{ background: #c0392b; color: white; }}
+        .cat-btn:hover {{ filter: brightness(1.2); transform: scale(1.05); }}
+        .cat-btn:active {{ transform: scale(0.95); }}
+        
+        .btn-public {{ background: var(--cat-public); }}
+        .btn-least {{ background: var(--cat-least); }}
+        .btn-avg {{ background: var(--cat-avg); }}
+        .btn-most {{ background: var(--cat-most); }}
+        .btn-reset {{ background: #444; }}
+        .btn-delete {{ background: #c0392b; }}
 
+        /* Status Indicator */
+        .status-badge {{
+            position: absolute;
+            top: 8px;
+            left: 8px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            z-index: 6;
+            box-shadow: 0 0 4px rgba(0,0,0,0.5);
+        }}
+
+        /* Modals */
         .modal {{
             position: fixed; top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            background: #1a1a1a; border: 2px solid var(--accent-color);
-            padding: 20px; z-index: 2000; width: 80%; max-width: 600px;
-            border-radius: 12px; display: none;
+            transform: translate(-50%, -50%) scale(0.95);
+            background: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            padding: 24px; z-index: 2000; width: 90%; max-width: 600px;
+            border-radius: 12px;
+            opacity: 0; pointer-events: none;
+            transition: all 0.2s;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.8);
         }}
-        .modal.visible {{ display: block; }}
+        .modal.visible {{ opacity: 1; pointer-events: auto; transform: translate(-50%, -50%) scale(1); }}
+        .modal h2 {{ margin-top: 0; margin-bottom: 16px; font-size: 1.2rem; }}
+        
         .modal-overlay {{
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.8); z-index: 1999; display: none;
+            background: rgba(0,0,0,0.8); backdrop-filter: blur(4px);
+            z-index: 1999; opacity: 0; pointer-events: none;
+            transition: opacity 0.2s;
         }}
-        .modal-overlay.visible {{ display: block; }}
+        .modal-overlay.visible {{ opacity: 1; pointer-events: auto; }}
+        
+        textarea {{
+            background: #0a0a0a; color: #fff; border: 1px solid #333;
+            padding: 12px; border-radius: 8px; font-family: monospace;
+            resize: vertical;
+        }}
+
         #back-to-top {{
             position: fixed; bottom: 30px; right: 30px;
-            background-color: var(--accent-color); color: black;
+            background-color: var(--accent-primary); color: white;
             width: 50px; height: 50px; border-radius: 50%;
             display: flex; align-items: center; justify-content: center;
-            opacity: 0; transition: opacity 0.3s; z-index: 100;
+            opacity: 0; transition: opacity 0.3s, transform 0.2s; z-index: 100;
+            text-decoration: none; font-size: 1.2rem; font-weight: bold;
+            box-shadow: 0 4px 12px rgba(229, 9, 20, 0.4);
         }}
         #back-to-top.visible {{ opacity: 1; }}
+        #back-to-top:hover {{ transform: scale(1.1); background-color: var(--accent-hover); }}
 
         #sentinel {{ height: 50px; width: 100%; }}
 
-        @media (max-width: 600px) {{
-            .grid {{ grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }}
-            .category-tabs {{ justify-content: flex-start; }}
-            .toolbar {{ flex-wrap: wrap; gap: 4px; }}
-            #search-input {{ order: -1; flex-basis: 100%; }}
-            .tab-btn {{ padding: 4px 8px; font-size: 0.7rem; }}
+        /* Responsive */
+        @media (max-width: 900px) {{
+            :root {{ --sidebar-width: 0px; }}
+            .sidebar {{ transform: translateX(-100%); transition: transform 0.3s; }}
+            .sidebar.mobile-open {{ transform: translateX(0); }}
+            .main-wrapper {{ margin-left: 0; }}
+            .mobile-menu-btn {{ display: block !important; }}
+            .top-bar {{ padding: 12px 16px; flex-wrap: wrap; }}
+            .search-container {{ order: 3; min-width: 100%; margin-top: 10px; }}
+        }}
+        
+        .mobile-menu-btn {{
+            display: none;
+            background: none; border: none; color: white;
+            font-size: 1.5rem; cursor: pointer; padding: 0 10px 0 0;
         }}
     </style>
 </head>
 <body>
-    <header>
-        <div class="header-content">
-            <h1>z3ncoding Video Library</h1>
-            <div class="category-tabs">
-                <button class="tab-btn active" onclick="setTab('none')">Main List</button>
-                <button class="tab-btn" onclick="setTab('public')">Public</button>
-                <button class="tab-btn" onclick="setTab('least')">Least Liked</button>
-                <button class="tab-btn" onclick="setTab('average')">Averagely Liked</button>
-                <button class="tab-btn" onclick="setTab('most')">Most Liked</button>
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <h1>z3ncoding <span>Library</span></h1>
+        </div>
+        <div class="nav-links">
+            <button class="nav-btn active" onclick="setTab('none')">Main Collection</button>
+            <button class="nav-btn" onclick="setTab('public')">Public & Exhibition</button>
+            <button class="nav-btn" onclick="setTab('least')">Least Liked</button>
+            <button class="nav-btn" onclick="setTab('average')">Averagely Liked</button>
+            <button class="nav-btn" onclick="setTab('most')">Most Liked</button>
+        </div>
+        <div class="sidebar-footer">
+            <button class="action-btn btn-connect" id="connect-folder-btn" onclick="connectFolder()">📁 Connect Folder</button>
+            <div class="sync-status disconnected" id="sync-status">⚠ Not connected — changes only in browser</div>
+            <button class="action-btn btn-export" onclick="toggleModal('export-modal')">Export Categories</button>
+            <button class="action-btn btn-blacklist" onclick="toggleModal('blacklist-modal')">Manage Blacklist</button>
+            <button class="action-btn" onclick="resetLocalStorage()" style="border-color:#555; font-size:0.78rem;">🔄 Reset Browser Data</button>
+        </div>
+    </aside>
+
+    <div class="modal-overlay" id="modal-overlay" onclick="closeModals()"></div>
+    <div class="modal" id="blacklist-modal">
+        <h2>Local Blacklist</h2>
+        <textarea id="blacklist-textarea" style="width:100%;height:200px;" readonly></textarea>
+        <div style="margin-top: 15px; display: flex; gap: 10px; justify-content: flex-end;">
+            <button class="action-btn" onclick="closeModals()">Close</button>
+            <button class="action-btn" onclick="clearBlacklist()" style="background: #e74c3c; border-color: #e74c3c; color: white;">Clear All</button>
+        </div>
+    </div>
+    <div class="modal" id="export-modal">
+        <h2>Export Categories JSON</h2>
+        <textarea id="export-textarea" style="width:100%;height:200px;" readonly></textarea>
+        <div style="margin-top: 15px; display: flex; justify-content: flex-end;">
+            <button class="action-btn" onclick="closeModals()">Close</button>
+        </div>
+    </div>
+
+    <main class="main-wrapper">
+        <div class="top-bar">
+            <button class="mobile-menu-btn" onclick="document.getElementById('sidebar').classList.toggle('mobile-open')">☰</button>
+            <div class="search-container">
+                <input type="text" id="search-input" placeholder="Search titles, tags..." autocomplete="off">
             </div>
-            <div class="toolbar">
-                <input type="text" id="search-input" placeholder="Search videos by title..." autocomplete="off">
+            <div class="top-controls">
                 <select id="sort-select">
                     <option value="newest">Recently Scraped</option>
                     <option value="title-az">Title (A-Z)</option>
                     <option value="views-desc">Most Viewed</option>
                     <option value="duration-desc">Longest Duration</option>
                 </select>
-                <button class="tab-btn" onclick="toggleModal('export-modal')" style="border-color: #27ae60; color: #27ae60;">Export</button>
-                <button class="tab-btn" onclick="toggleModal('blacklist-modal')" style="border-color: #c0392b; color: #c0392b;">Blacklist</button>
+                <div class="stats"><span id="visible-count">0</span> / {len(all_videos)}</div>
             </div>
-            <div class="stats">Showing <span id="visible-count">0</span> / {len(all_videos)} videos</div>
         </div>
-    </header>
 
-    <div class="modal-overlay" id="modal-overlay" onclick="closeModals()"></div>
-    <div class="modal" id="blacklist-modal">
-        <h2>Local Blacklist</h2>
-        <textarea id="blacklist-textarea" style="width:100%;height:200px;" readonly></textarea>
-        <div style="margin-top: 15px; display: flex; gap: 10px;">
-            <button class="tab-btn" onclick="closeModals()">Close</button>
-            <button class="tab-btn" onclick="clearBlacklist()" style="background: #c0392b; color: white;">Clear All</button>
+        <div class="content-area">
+            <div class="grid" id="video-grid"></div>
+            <div id="sentinel"></div>
         </div>
-    </div>
-    <div class="modal" id="export-modal">
-        <h2>Export Categories</h2>
-        <textarea id="export-textarea" style="width:100%;height:200px;" readonly></textarea>
-        <div style="margin-top: 15px; display: flex; gap: 10px;">
-            <button class="tab-btn" onclick="closeModals()">Close</button>
-        </div>
-    </div>
-
-    <main class="main-container">
-        <div class="grid" id="video-grid"></div>
-        <div id="sentinel"></div>
     </main>
 
     <a href="#" id="back-to-top">↑</a>
@@ -681,32 +892,44 @@ def write_html_grid(all_videos, filename, saved_categories):
         let currentIndex = 0;
         const BATCH_SIZE = 40;
 
+        function getCategoryColor(cat) {{
+            if (cat === 'public') return 'var(--cat-public)';
+            if (cat === 'least') return 'var(--cat-least)';
+            if (cat === 'average') return 'var(--cat-avg)';
+            if (cat === 'most') return 'var(--cat-most)';
+            return 'transparent';
+        }}
+
         function createVideoCard(vid) {{
             const card = document.createElement('div');
             card.className = 'video-card';
             const safeTitle = vid[1].replace(/"/g, '&quot;');
+            const viewkey = vid[8];
+            const currentCat = getVideoCategory(vid);
+            const badgeColor = getCategoryColor(currentCat);
             
             card.innerHTML = `
-                <a href="${{vid[2]}}" target="_blank" style="text-decoration:none; color:inherit;">
+                <a href="${{vid[2]}}" target="_blank" style="text-decoration:none; color:inherit; display:flex; flex-direction:column; height:100%;">
                     <div class="thumbnail-wrapper" data-preview="${{vid[11]}}">
-                        <img class="thumbnail" src="${{vid[3]}}" alt="No Image" loading="lazy" onerror="this.style.display='none'">
+                        ${{badgeColor !== 'transparent' ? `<div class="status-badge" style="background:${{badgeColor}};"></div>` : ''}}
+                        <img class="thumbnail" src="${{vid[3]}}" alt="Thumbnail" loading="lazy" onerror="this.style.display='none'">
                         ${{vid[4] ? `<span class="duration">${{vid[4]}}</span>` : ''}}
                     </div>
                     <div class="video-info">
                         <div class="video-title" title="${{safeTitle}}">${{vid[1]}}</div>
                         <div class="video-meta">
-                            <span>${{vid[6]}}</span>
-                            <span style="font-size:0.7rem; opacity:0.5;">${{vid[8]}}</span>
+                            <span>${{vid[6]}} views</span>
+                            <span style="font-family:monospace; font-size:0.7rem; opacity:0.4;">${{viewkey}}</span>
                         </div>
                     </div>
                 </a>
-                <div class="category-actions">
-                    <button class="cat-btn btn-public" onclick="categorize('${{vid[8]}}', 'public')" title="Public">P</button>
-                    <button class="cat-btn btn-least" onclick="categorize('${{vid[8]}}', 'least')" title="Least">L</button>
-                    <button class="cat-btn btn-avg" onclick="categorize('${{vid[8]}}', 'average')" title="Avg">A</button>
-                    <button class="cat-btn btn-most" onclick="categorize('${{vid[8]}}', 'most')" title="Most">M</button>
-                    <button class="cat-btn btn-reset" onclick="categorize('${{vid[8]}}', 'none')" title="Reset">↺</button>
-                    <button class="cat-btn btn-delete" onclick="deleteVideo('${{vid[8]}}')" title="Delete">🗑️</button>
+                <div class="category-actions" onclick="event.preventDefault();">
+                    <button class="cat-btn btn-public" onclick="categorize('${{viewkey}}', 'public')" title="Public">PUB</button>
+                    <button class="cat-btn btn-least" onclick="categorize('${{viewkey}}', 'least')" title="Least">MIN</button>
+                    <button class="cat-btn btn-avg" onclick="categorize('${{viewkey}}', 'average')" title="Avg">AVG</button>
+                    <button class="cat-btn btn-most" onclick="categorize('${{viewkey}}', 'most')" title="Most">MAX</button>
+                    <button class="cat-btn btn-reset" onclick="categorize('${{viewkey}}', 'none')" title="Reset">↺</button>
+                    <button class="cat-btn btn-delete" onclick="deleteVideo('${{viewkey}}')" title="Delete">✕</button>
                 </div>
             `;
             return card;
@@ -720,12 +943,22 @@ def write_html_grid(all_videos, filename, saved_categories):
             currentIndex = end;
         }}
 
+        function getVideoCategory(vid) {{
+            // localStorage takes precedence; treat empty string same as missing
+            const localCat = categories[vid[8]];
+            if (localCat && localCat !== '') return localCat;
+            // Fall back to baked category
+            const bakedCat = vid[9];
+            if (bakedCat && bakedCat !== '') return bakedCat;
+            return 'none';
+        }}
+
         function filterAndSort() {{
             const query = searchInput.value.toLowerCase().trim();
             const sortMode = sortSelect.value;
             
             filteredVideos = ALL_VIDEOS.filter(vid => {{
-                const cat = categories[vid[8]] || vid[9] || 'none';
+                const cat = getVideoCategory(vid);
                 const isDeleted = deleted.has(vid[8]);
                 const matchesTab = (cat === currentTab);
                 const matchesQuery = query === '' || vid[10].includes(query);
@@ -754,52 +987,124 @@ def write_html_grid(all_videos, filename, saved_categories):
         
         observer.observe(document.getElementById('sentinel'));
 
-        // Preview Rotation logic
-        let previewInterval;
-        document.addEventListener('mouseover', e => {{
-            const wrapper = e.target.closest('.thumbnail-wrapper');
-            if (!wrapper) return;
-            
+        // Preview Rotation logic — uses event delegation with mouseenter/mouseleave
+        let activePreviewWrapper = null;
+        let previewInterval = null;
+        let previewFrame = 1;
+
+        function startPreview(wrapper) {{
             const originalSrc = wrapper.getAttribute('data-preview');
             if (!originalSrc || originalSrc === 'undefined' || originalSrc === 'null' || originalSrc === '') return;
+
+            activePreviewWrapper = wrapper;
 
             let previewImg = wrapper.querySelector('.preview-img');
             if (!previewImg) {{
                 previewImg = document.createElement('img');
                 previewImg.className = 'preview-img';
+                previewImg.setAttribute('loading', 'eager');
                 wrapper.appendChild(previewImg);
             }}
-            
-            const match = originalSrc.match(/(.+?)(\\d+)\\.jpg$/);
+
+            // Reset inline opacity so the CSS :hover rule takes effect again
+            previewImg.style.opacity = '';
+
+            // Determine URL pattern
+            // Pattern 1: numbered jpg — e.g. .../thumbs_10/(...)16.jpg → cycle 1–16
+            const numberedMatch = originalSrc.match(/^(.+?)(\\d+)(\\.jpg)$/i);
+            // Pattern 2: vts parameter — e.g. /vts:1624 → increment by 20 per frame
             const vtsMatch = originalSrc.match(/vts:(\\d+)/);
-            let frame = 1;
-            
+
+            previewFrame = 1;
+            let errorCount = 0;
+
+            // On image load error, skip to next frame (don't show broken image)
+            previewImg.onerror = function() {{
+                errorCount++;
+                if (errorCount > 4) {{
+                    // Too many errors — this URL pattern doesn't support cycling
+                    clearInterval(previewInterval);
+                    previewInterval = null;
+                    // Fall back to just showing the static thumbnail as preview
+                    previewImg.src = originalSrc;
+                    previewImg.onerror = function() {{ previewImg.style.opacity = '0'; }};
+                    return;
+                }}
+                previewFrame = (previewFrame % 16) + 1;
+            }};
+
             clearInterval(previewInterval);
-            previewInterval = setInterval(() => {{
-                if (match) previewImg.src = `${{match[1]}}${{frame}}.jpg`;
-                else if (vtsMatch) previewImg.src = originalSrc.replace(/vts:\\d+/, `vts:${{parseInt(vtsMatch[1]) + frame * 20}}`);
-                frame = (frame % 15) + 1;
-            }}, 400);
-        }});
-        
-        document.addEventListener('mouseout', e => {{
+
+            if (numberedMatch) {{
+                // Cycle through frame numbers 1–16
+                const base = numberedMatch[1];
+                const ext = numberedMatch[3];
+                previewImg.src = `${{base}}${{previewFrame}}${{ext}}`;
+                previewInterval = setInterval(() => {{
+                    previewFrame = (previewFrame % 16) + 1;
+                    previewImg.src = `${{base}}${{previewFrame}}${{ext}}`;
+                }}, 500);
+            }} else if (vtsMatch) {{
+                // Increment vts timestamp
+                const baseVts = parseInt(vtsMatch[1]);
+                previewImg.src = originalSrc.replace(/vts:\\d+/, `vts:${{baseVts + previewFrame * 20}}`);
+                previewInterval = setInterval(() => {{
+                    previewFrame = (previewFrame % 16) + 1;
+                    previewImg.src = originalSrc.replace(/vts:\\d+/, `vts:${{baseVts + previewFrame * 20}}`);
+                }}, 500);
+            }} else {{
+                // Static image — no frame cycling, just show as preview
+                previewImg.src = originalSrc;
+                previewImg.onerror = function() {{ previewImg.style.opacity = '0'; }};
+            }}
+        }}
+
+        function stopPreview(wrapper) {{
+            clearInterval(previewInterval);
+            previewInterval = null;
+            activePreviewWrapper = null;
+            const previewImg = wrapper.querySelector('.preview-img');
+            if (previewImg) {{
+                previewImg.style.opacity = '0';
+                previewImg.onerror = null;
+                // Clear src after fade-out transition
+                setTimeout(() => {{
+                    if (previewImg.style.opacity === '0') {{
+                        previewImg.removeAttribute('src');
+                    }}
+                }}, 250);
+            }}
+        }}
+
+        // Delegate mouseenter/mouseleave on the grid (works for dynamically added cards)
+        videoGrid.addEventListener('mouseenter', e => {{
+            const wrapper = e.target.closest('.thumbnail-wrapper');
+            if (wrapper && wrapper !== activePreviewWrapper) {{
+                startPreview(wrapper);
+            }}
+        }}, true);
+
+        videoGrid.addEventListener('mouseleave', e => {{
             const wrapper = e.target.closest('.thumbnail-wrapper');
             if (wrapper) {{
-                clearInterval(previewInterval);
-                const previewImg = wrapper.querySelector('.preview-img');
-                if (previewImg) {{
-                    previewImg.style.opacity = '0';
-                    setTimeout(() => {{ if (previewImg.style.opacity === '0') previewImg.src = ''; }}, 200);
-                }}
+                stopPreview(wrapper);
             }}
-        }});
+        }}, true);
 
         function setTab(tab) {{
             currentTab = tab;
-            document.querySelectorAll('.tab-btn').forEach(btn => {{
+            
+            // Update sidebar active state
+            document.querySelectorAll('.nav-btn').forEach(btn => {{
                 const text = btn.innerText.toLowerCase();
-                btn.classList.toggle('active', tab === 'none' ? text === 'main list' : text.includes(tab));
+                const isMain = tab === 'none' && text.includes('main');
+                const isMatch = text.includes(tab) && tab !== 'none';
+                btn.classList.toggle('active', isMain || isMatch);
             }});
+            
+            // Close mobile menu if open
+            document.getElementById('sidebar').classList.remove('mobile-open');
+            
             videoGrid.innerHTML = '';
             setTimeout(filterAndSort, 0);
             window.scrollTo(0, 0);
@@ -809,13 +1114,15 @@ def write_html_grid(all_videos, filename, saved_categories):
             if (cat === 'none') delete categories[vk];
             else categories[vk] = cat;
             localStorage.setItem('z3ncoding_categories', JSON.stringify(categories));
+            saveToFiles();
             filterAndSort();
         }}
 
         function deleteVideo(vk) {{
-            if (confirm('Delete video?')) {{
+            if (confirm('Move to blacklist and hide from view?')) {{
                 deleted.add(vk);
                 localStorage.setItem('z3ncoding_deleted', JSON.stringify([...deleted]));
+                saveToFiles();
                 filterAndSort();
             }}
         }}
@@ -833,8 +1140,18 @@ def write_html_grid(all_videos, filename, saved_categories):
         }}
 
         function clearBlacklist() {{
-            if (confirm('Clear blacklist?')) {{
+            if (confirm('Clear entire blacklist? This cannot be undone.')) {{
                 deleted.clear(); localStorage.setItem('z3ncoding_deleted', '[]'); filterAndSort(); closeModals();
+            }}
+        }}
+
+        function resetLocalStorage() {{
+            if (confirm('Reset all browser-saved categories and blacklist?\\nThe baked-in data from categories.json will be used instead.\\n\\nThis cannot be undone.')) {{
+                categories = {{}};
+                deleted = new Set();
+                localStorage.removeItem('z3ncoding_categories');
+                localStorage.removeItem('z3ncoding_deleted');
+                filterAndSort();
             }}
         }}
 
@@ -845,15 +1162,233 @@ def write_html_grid(all_videos, filename, saved_categories):
                 setTimeout(filterAndSort, 0);
             }}, 300);
         }});
+        
         sortSelect.addEventListener('change', () => {{
             videoGrid.innerHTML = '';
             setTimeout(filterAndSort, 0);
         }});
+        
         window.addEventListener('scroll', () => {{
             backToTop.classList.toggle('visible', window.scrollY > 500);
         }});
 
+        // ===== File System Access API — Auto-save categories & blacklist to disk =====
+        const DB_NAME = 'z3ncoding_fsapi';
+        const DB_STORE = 'handles';
+        const DB_KEY = 'projectDir';
+        let dirHandle = null;
+
+        function openDB() {{
+            return new Promise((resolve, reject) => {{
+                const req = indexedDB.open(DB_NAME, 1);
+                req.onupgradeneeded = () => {{ req.result.createObjectStore(DB_STORE); }};
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            }});
+        }}
+
+        async function saveDirHandle(handle) {{
+            const db = await openDB();
+            const tx = db.transaction(DB_STORE, 'readwrite');
+            tx.objectStore(DB_STORE).put(handle, DB_KEY);
+            return new Promise((resolve, reject) => {{
+                tx.oncomplete = resolve;
+                tx.onerror = () => reject(tx.error);
+            }});
+        }}
+
+        async function loadDirHandle() {{
+            const db = await openDB();
+            const tx = db.transaction(DB_STORE, 'readonly');
+            const req = tx.objectStore(DB_STORE).get(DB_KEY);
+            return new Promise((resolve, reject) => {{
+                req.onsuccess = () => resolve(req.result || null);
+                req.onerror = () => reject(req.error);
+            }});
+        }}
+
+        function updateSyncUI(state, msg) {{
+            const el = document.getElementById('sync-status');
+            const btn = document.getElementById('connect-folder-btn');
+            el.className = 'sync-status ' + state;
+            el.textContent = msg;
+            if (state === 'connected') {{
+                btn.classList.add('connected');
+                btn.textContent = '✅ Folder Connected';
+            }} else if (state === 'disconnected') {{
+                btn.classList.remove('connected');
+                btn.textContent = '📁 Connect Folder';
+            }}
+        }}
+
+        async function connectFolder() {{
+            try {{
+                // File System Access API is blocked on file:// URLs
+                if (location.protocol === 'file:') {{
+                    alert(
+                        'Cannot connect folders when opened via file://\\n\\n' +
+                        'The File System Access API requires an HTTP server.\\n\\n' +
+                        'Run this command in your project folder:\\n' +
+                        '   python serve.py\\n\\n' +
+                        'It will auto-open this page in Chrome at http://localhost:8888'
+                    );
+                    updateSyncUI('disconnected', '⚠ Run "python serve.py" to enable');
+                    return;
+                }}
+                if (!window.showDirectoryPicker) {{
+                    alert('Your browser does not support the File System Access API. Please use Chrome or Edge.');
+                    return;
+                }}
+                dirHandle = await window.showDirectoryPicker({{ mode: 'readwrite' }});
+                await saveDirHandle(dirHandle);
+                updateSyncUI('connected', '✓ Connected — auto-saving to disk');
+                // Immediately save current state
+                await saveToFiles();
+            }} catch (err) {{
+                if (err.name !== 'AbortError') {{
+                    console.error('Connect folder error:', err);
+                    updateSyncUI('disconnected', '\u26a0 Connection failed: ' + err.message);
+                    alert('Connect folder failed:\\n' + err.name + ': ' + err.message);
+                }}
+            }}
+        }}
+
+        async function writeFile(handle, name, content) {{
+            try {{
+                const fileHandle = await handle.getFileHandle(name, {{ create: true }});
+                const writable = await fileHandle.createWritable();
+                await writable.write(content);
+                await writable.close();
+                return true;
+            }} catch (err) {{
+                console.error(`Error writing ${{name}}:`, err);
+                return false;
+            }}
+        }}
+
+        async function readFile(handle, name) {{
+            try {{
+                const fileHandle = await handle.getFileHandle(name);
+                const file = await fileHandle.getFile();
+                return await file.text();
+            }} catch (err) {{
+                // File doesn't exist yet — that's OK
+                return null;
+            }}
+        }}
+
+        let saveTimeout = null;
+        function saveToFiles() {{
+            // Debounce saves to avoid hammering disk on rapid clicks
+            clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(async () => {{
+                if (!dirHandle) return;
+
+                // Verify we still have permission
+                try {{
+                    const perm = await dirHandle.queryPermission({{ mode: 'readwrite' }});
+                    if (perm !== 'granted') {{
+                        const req = await dirHandle.requestPermission({{ mode: 'readwrite' }});
+                        if (req !== 'granted') {{
+                            updateSyncUI('disconnected', '⚠ Permission denied — click to reconnect');
+                            dirHandle = null;
+                            return;
+                        }}
+                    }}
+                }} catch(err) {{
+                    updateSyncUI('disconnected', '⚠ Permission lost — click to reconnect');
+                    dirHandle = null;
+                    return;
+                }}
+
+                updateSyncUI('saving', '💾 Saving...');
+
+                // Build merged categories: start with embedded defaults, overlay localStorage
+                const mergedCategories = {{}};
+                for (const vid of ALL_VIDEOS) {{
+                    if (vid[9] && vid[9] !== 'none') mergedCategories[vid[8]] = vid[9];
+                }}
+                Object.assign(mergedCategories, categories);
+                // Remove 'none' entries
+                for (const k of Object.keys(mergedCategories)) {{
+                    if (mergedCategories[k] === 'none') delete mergedCategories[k];
+                }}
+
+                const catOk = await writeFile(dirHandle, 'categories.json', JSON.stringify(mergedCategories, null, 2));
+                const blOk = await writeFile(dirHandle, 'blacklist.txt', [...deleted].join('\\n') + '\\n');
+
+                if (catOk && blOk) {{
+                    updateSyncUI('connected', '✓ Saved — ' + new Date().toLocaleTimeString());
+                }} else {{
+                    updateSyncUI('disconnected', '⚠ Write failed — click to reconnect');
+                }}
+            }}, 300);
+        }}
+
+        async function loadFromDisk() {{
+            if (!dirHandle) return;
+
+            try {{
+                const perm = await dirHandle.queryPermission({{ mode: 'readwrite' }});
+                if (perm !== 'granted') {{
+                    // Can't auto-grant — need user gesture. Show UI hint.
+                    updateSyncUI('disconnected', '🔄 Click "Connect Folder" to re-authorize');
+                    return;
+                }}
+            }} catch(err) {{
+                return;
+            }}
+
+            // Read categories from disk and merge
+            const catText = await readFile(dirHandle, 'categories.json');
+            if (catText) {{
+                try {{
+                    const diskCats = JSON.parse(catText);
+                    // Disk categories are the baseline; localStorage overrides on top
+                    const localCats = JSON.parse(localStorage.getItem('z3ncoding_categories') || '{{}}');
+                    // Merge: disk first, then local overrides
+                    const merged = Object.assign({{}}, diskCats, localCats);
+                    categories = merged;
+                    localStorage.setItem('z3ncoding_categories', JSON.stringify(categories));
+                }} catch(e) {{
+                    console.error('Error parsing disk categories:', e);
+                }}
+            }}
+
+            // Read blacklist from disk and merge
+            const blText = await readFile(dirHandle, 'blacklist.txt');
+            if (blText) {{
+                const diskDeleted = blText.split('\\n').map(s => s.trim()).filter(Boolean);
+                const localDeleted = JSON.parse(localStorage.getItem('z3ncoding_deleted') || '[]');
+                deleted = new Set([...diskDeleted, ...localDeleted]);
+                localStorage.setItem('z3ncoding_deleted', JSON.stringify([...deleted]));
+            }}
+
+            updateSyncUI('connected', '✓ Connected — loaded from disk');
+        }}
+
+        // On page load: try to restore saved directory handle
+        async function initFileSystem() {{
+            if (location.protocol === 'file:') {{
+                updateSyncUI('disconnected', '⚠ Use "python serve.py" for auto-save');
+                return;
+            }}
+            try {{
+                const saved = await loadDirHandle();
+                if (saved) {{
+                    dirHandle = saved;
+                    await loadFromDisk();
+                    // Re-render with merged data
+                    filterAndSort();
+                }}
+            }} catch(err) {{
+                console.log('No saved directory handle found:', err);
+            }}
+        }}
+
+        // Initialize
         filterAndSort();
+        initFileSystem();
     </script>
 </body>
 </html>"""
@@ -928,46 +1463,6 @@ def main():
         if page > 100: 
             break
 
-    # --- Search for specific tags ---
-    public_tags = ["public", "exhibition", "watched", "being watched"]
-    print(f"\nScraping search results for tags: {public_tags}...")
-    
-    for tag in public_tags:
-        for p in range(1, 4): # Scrape first 3 pages of each search
-            search_videos = get_videos_from_search(tag, p)
-            if not search_videos:
-                break
-                
-            new_tag_count = 0
-            for vid in search_videos:
-                if vid['viewkey'] not in seen_viewkeys:
-                    seen_viewkeys.add(vid['viewkey'])
-                    all_videos.append(vid)
-                    new_tag_count += 1
-            
-            print(f"Tag '{tag}' Page {p}: Found {len(search_videos)} videos, {new_tag_count} were new.")
-            if new_tag_count == 0 and len(search_videos) > 0:
-                break # Stop if we only see duplicates
-            time.sleep(1)
-
-    # --- Related Videos for "Most Liked" ---
-    most_liked_keys = [k for k, v in saved_categories.items() if v == "most"]
-    print(f"\nScraping related videos for {len(most_liked_keys)} 'Most Liked' videos...")
-    
-    for count, vk in enumerate(most_liked_keys, 1):
-        related = get_related_videos(vk)
-        if not related:
-            continue
-            
-        new_rel_count = 0
-        for vid in related[:10]:
-            if vid['viewkey'] not in seen_viewkeys:
-                seen_viewkeys.add(vid['viewkey'])
-                all_videos.append(vid)
-                new_rel_count += 1
-        
-        print(f"[{count}/{len(most_liked_keys)}] {vk}: Added {new_rel_count} new related videos.")
-        time.sleep(1) # Small delay to avoid 429
 
     if not all_videos:
         print("No videos found. Check the profile URL or network connection.")

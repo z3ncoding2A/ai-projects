@@ -1,0 +1,43 @@
+# Parametric EQ optimization chain for DIY headphone microphone to dictation tools
+context.modules = [
+    { name = libpipewire-module-filter-chain
+        args = {
+            node.description = "whisper dictation mic"
+            node.name        = "whisper dictation mic"
+            
+            capture.props = {
+                node.passive = true
+                audio.position = [ FL FR ]
+                target.object = "alsa_input.pci-0000_00_1f.3.analog-stereo"
+            }
+            
+            playback.props = {
+                media.class      = Audio/Source
+                node.name        = "whisper dictation mic"
+                node.description = "whisper dictation mic"
+                node.passive     = true
+                audio.rate       = 16000
+            }
+            
+            filter.graph = {
+                nodes = [
+                    { type = builtin name = hp_stage label = bq_highpass control = { "Freq" = 150.0 "Q" = 1.0 } }
+                    { type = builtin name = cut_stage label = bq_peaking control = { "Freq" = 400.0 "Q" = 1.2 "Gain" = -4.0 } }
+                    { type = builtin name = boost1 label = bq_peaking control = { "Freq" = 1500.0 "Q" = 1.0 "Gain" = 1.5 } }
+                    { type = builtin name = boost2 label = bq_peaking control = { "Freq" = 2800.0 "Q" = 1.2 "Gain" = 2.5 } }
+                    { type = builtin name = boost3 label = bq_peaking control = { "Freq" = 4200.0 "Q" = 1.0 "Gain" = 2.0 } }
+                    { type = builtin name = lp_stage label = bq_lowpass control = { "Freq" = 6000.0 "Q" = 1.0 } }
+                ]
+                links = [
+                    { output = "hp_stage:Out"   input = "cut_stage:In" }
+                    { output = "cut_stage:Out"  input = "boost1:In" }
+                    { output = "boost1:Out"     input = "boost2:In" }
+                    { output = "boost2:Out"     input = "boost3:In" }
+                    { output = "boost3:Out"     input = "lp_stage:In" }
+                ]
+                inputs = [ "hp_stage:In" ]
+                outputs = [ "lp_stage:Out" ]
+            }
+        }
+    }
+]

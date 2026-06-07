@@ -4,24 +4,6 @@
 BACKUP_DIR="/mnt/home_backups"
 MAX_BACKUPS=3
 EXCLUDES=(
-    ".cache/*"
-    ".local/share/Trash/*"
-	".mozilla/firefox/*/cache/*
-	"Music/"
-	".pcloud/"
-	"pCloudDrive/"
-	".git"
-	".bash_history"
-	"Applications/*"
-	"webui-venv"
-	".lmstudio"
-	".zsh_history"
-	"Porn/*"
-	""
-)
-
-
-EXCLUDES=(
     ".cache/"
     ".local/share/Trash/"
     "pCloudDrive/"
@@ -31,7 +13,6 @@ EXCLUDES=(
     ".git/"
     ".bash_history"
     ".zsh_history"
-    "Porn/"
     "tmp/"
     "temp/"
     "node_modules/"
@@ -39,9 +20,13 @@ EXCLUDES=(
     "build/"
     "venv/"
     ".venv/"
-	"Applications"
-	"webui-venv"
-	".lmstudio"
+    "Applications/*"
+    "webui-venv"
+    ".lmstudio/*"
+    "virtual-machines/*"
+    "opt/*"
+    ".config.orig/"
+    ".config/google-chrome/BrowserMetrics/"
 )
 
 
@@ -71,11 +56,14 @@ done
 # Note: trailing slash on "$HOME/" is crucial for rsync to copy contents INTO DESTINATION, not HOME directory itself.
 #       No trailing slash on "$DESTINATION" because we want a directory named $CURRENT_DATE inside $BACKUP_DIR.
 eval "rsync -aP --delete $EXCLUDE_ARGS '$HOME/' '$DESTINATION'"
+RSYNC_ERR=$?
 
-if [ $? -eq 0 ]; then
+if [ $RSYNC_ERR -eq 0 ]; then
     echo "Backup completed successfully."
+elif [ $RSYNC_ERR -eq 24 ]; then
+    echo "Backup completed with non-fatal warnings: some files vanished during transfer (code 24)."
 else
-    echo "Backup failed!"
+    echo "Backup failed with rsync error code $RSYNC_ERR!"
     exit 1
 fi
 
@@ -83,4 +71,3 @@ fi
 echo "Performing backup rotation. Keeping last $MAX_BACKUPS days."
 find "$BACKUP_DIR" -maxdepth 1 -type d -name "*-*-*" | sort -r | tail -n +$((MAX_BACKUPS + 1)) | xargs -r rm -rf
 
-echo "Daily $HOME backup script finished."

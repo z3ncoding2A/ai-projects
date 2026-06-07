@@ -1,0 +1,5 @@
+{
+    "use_hypr_bindings": false,
+    "wake_word_sensitivity": 0.6,
+    "wake_words": "speak"
+}
