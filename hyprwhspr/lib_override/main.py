@@ -26,6 +26,12 @@ _HALLUCINATION_MARKERS = {
     'video playback', 'music', 'music playing', 'keyboard clicking',
 }
 
+import dotenv
+dotenv_path = Path(__file__).parent.parent / '.env'
+if dotenv_path.exists():
+    dotenv.load_dotenv(str(dotenv_path))
+
+
 
 def _looks_like_wlroots_session() -> bool:
     desktop = ':'.join([
@@ -86,6 +92,7 @@ from paths import (
 )
 from backend_utils import normalize_backend
 from segment_manager import SegmentManager
+from wake_word import WakeWordListener
 
 class hyprwhsprApp:
     """Main application class for hyprwhspr voice dictation (Headless Mode)"""
@@ -256,6 +263,18 @@ class hyprwhsprApp:
 
         # Set up global shortcuts (needed for headless operation)
         self._setup_global_shortcuts()
+
+        # Initialize Wake Word Listener if configured
+        wake_words = self.config.get_setting('wake_words', '')
+        if wake_words:
+            sensitivity = self.config.get_setting('wake_word_sensitivity', 0.6)
+            self.wake_word_listener = WakeWordListener(
+                wake_words=wake_words,
+                sensitivity=sensitivity,
+                on_detected_callback=self._on_wake_word_detected
+            )
+        else:
+            self.wake_word_listener = None
 
     def _setup_global_shortcuts(self):
         """Initialize global keyboard shortcuts"""
@@ -753,8 +772,13 @@ class hyprwhsprApp:
                     if raw_level < threshold:
                         silent_count += 1
                         if silent_count >= samples_needed:
-                            self._continuous_flush_audio()
-                            silent_count = 0
+                            if self.config.get_setting("continuous_auto_stop", True):
+                                print("[CONTINUOUS] Silence detected - stopping recording completely", flush=True)
+                                self._stop_recording()
+                                break
+                            else:
+                                self._continuous_flush_audio()
+                                silent_count = 0
                     else:
                         silent_count = 0
                     self._continuous_silence_stop.wait(self._POLL_INTERVAL)
@@ -1161,6 +1185,9 @@ class hyprwhsprApp:
             self.is_recording = True
             # Store language override for this recording session
             self._current_language_override = language_override
+
+        if hasattr(self, 'wake_word_listener') and self.wake_word_listener:
+            self.wake_word_listener.pause()
         
         # Block recording if model is still loading in background
         if self._model_initializing:
@@ -1381,6 +1408,10 @@ class hyprwhsprApp:
             if self.audio_ducker.is_ducked:
                 self.audio_ducker.restore()
 
+            # Resume wake word listener if it was paused
+            if hasattr(self, 'wake_word_listener') and self.wake_word_listener:
+                self.wake_word_listener.resume()
+
     def _cleanup_recording_state(self):
         """Best-effort cleanup after any recording ends. Safe to call multiple times."""
         self._notify_capture_subscriber("", final=True)
@@ -1395,6 +1426,11 @@ class hyprwhsprApp:
             pass
         try:
             self._stop_audio_level_monitoring()
+        except Exception:
+            pass
+        try:
+            if hasattr(self, 'wake_word_listener') and self.wake_word_listener:
+                self.wake_word_listener.resume()
         except Exception:
             pass
         try:
@@ -2589,6 +2625,23 @@ class hyprwhsprApp:
         self._write_recovery_result(False, 'background_retry_exhausted')
         self._background_recovery_needed.clear()
 
+    def _on_wake_word_detected(self):
+        """Callback invoked when wake word is heard"""
+        print("[WAKE_WORD] Wake word detected! Starting recording...", flush=True)
+        # Write 'start\n' to FIFO to securely trigger exactly as shortcut would
+        try:
+            if RECORDING_CONTROL_FILE.exists() and RECORDING_CONTROL_FILE.is_fifo():
+                fd = os.open(str(RECORDING_CONTROL_FILE), os.O_WRONLY | os.O_NONBLOCK)
+                try:
+                    os.write(fd, b"start\n")
+                finally:
+                    os.close(fd)
+            else:
+                self._start_recording()
+        except OSError as e:
+            print(f"[WAKE_WORD] Failed to self-trigger via FIFO: {e}", flush=True)
+            self._start_recording()
+
     def run(self):
         """Start the application"""
         # Restore user's preferred default source (persisted by mic-select picker)
@@ -2668,6 +2721,11 @@ class hyprwhsprApp:
             if not self.whisper_manager.initialize():
                 print("[ERROR] Failed to initialize Whisper.")
                 return False
+
+        # Start the wake word listener
+        if hasattr(self, 'wake_word_listener') and self.wake_word_listener:
+            if not self.wake_word_listener.start():
+                print("[WARN] Failed to start wake word listener.")
 
         if use_hypr_bindings:
             print("\n[READY] hyprwhspr ready - using Hyprland compositor bindings", flush=True)
@@ -2771,6 +2829,10 @@ class hyprwhsprApp:
             # Stop cancel shortcut
             if self._cancel_shortcuts:
                 self._cancel_shortcuts.stop()
+
+            # Stop wake word listener
+            if hasattr(self, 'wake_word_listener') and self.wake_word_listener:
+                self.wake_word_listener.stop()
 
             # Stop audio capture
             if self.is_recording:

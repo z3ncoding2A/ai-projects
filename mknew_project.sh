@@ -15,7 +15,9 @@ EOF
 
 cat << 'EOF' > "${PROJ_DIR}/config/settings.json"
 {
-  "model": "gemini-2.5-flash",
+   "model": {
+    "name": "gemini-3.1-pro-preview"
+  },
   "generation_config": {
     "temperature": 0.7,
     "top_p": 0.95,

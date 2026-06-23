@@ -1,0 +1,28 @@
+# sys-restore configuration
+
+# Storage location for all snapshots
+SNAPSHOT_DIR="/mnt/snapshots"
+
+# Root filesystem backup settings
+BACKUP_ROOT="yes"
+MAX_ROOT_SNAPSHOTS=3
+
+# Global Exclusions (These are passed to rsync)
+# It is important to exclude pseudo-filesystems, transient data, and the snapshot directory itself.
+EXCLUSIONS=(
+    "/dev/*"
+    "/proc/*"
+    "/sys/*"
+    "/tmp/*"
+    "/run/*"
+    "/mnt/*"
+    "/media/*"
+    "/lost+found"
+    "/var/run/*"
+    "/var/lock/*"
+    "/var/tmp/*"
+    "**/.cache/*"
+    "/home/z3ncoding123/.pcloud/*"
+    "/home/z3ncoding123/pCloudDrive/*"
+    "/home/z3ncoding123/.lmstudio/*"
+)

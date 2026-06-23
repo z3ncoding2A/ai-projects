@@ -57,6 +57,11 @@ class DesktopAssistant:
         print("Recording started...")
         self.recording_buffer = []
         self.is_recording = True
+        
+        # Start the audio stream only when actively recording to avoid locking the mic
+        self.stream = sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype='float32', callback=self.audio_callback, blocksize=CHUNK_SAMPLES)
+        self.stream.start()
+        
         self.show_ui()
 
     def stop_recording_and_process(self):
@@ -64,6 +69,13 @@ class DesktopAssistant:
             return
         print("Recording stopped. Processing...")
         self.is_recording = False
+        
+        # Stop and release the audio stream
+        if self.stream is not None:
+            self.stream.stop()
+            self.stream.close()
+            self.stream = None
+            
         self.hide_ui()
         
         if len(self.recording_buffer) == 0:
@@ -121,10 +133,6 @@ class DesktopAssistant:
         server.listen(1)
         print("Daemon listening for toggle commands...")
         print("Run 'python main.py toggle' to start/stop recording.")
-        
-        # Start audio stream immediately, but we only save data when is_recording is True
-        self.stream = sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype='float32', callback=self.audio_callback, blocksize=CHUNK_SAMPLES)
-        self.stream.start()
 
         try:
             while True:
@@ -139,8 +147,6 @@ class DesktopAssistant:
         except KeyboardInterrupt:
             pass
         finally:
-            self.stream.stop()
-            self.stream.close()
             server.close()
             if os.path.exists(SOCKET_PATH):
                 os.remove(SOCKET_PATH)

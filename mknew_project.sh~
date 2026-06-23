@@ -1,7 +1,7 @@
 #!/usr/bin/bash
 
 # Define target project name
-export PROJ_NAME="gemini-cli-project"
+export PROJ_NAME="hyprwhspr"
 export PROJ_DIR="$(pwd)/${PROJ_NAME}"
 
 # Create robust directory structure

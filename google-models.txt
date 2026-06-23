@@ -1,0 +1,79 @@
+  Newly Released & Announced Models (Google I/O 2026)
+   * Gemini 3.5 Flash
+       * Status: Live / Available now.
+       * Details: The brand-new default model for high-speed reasoning, "vibe
+         coding", and agentic workflows. It outputs 4x faster than previous frontier
+         models and has a highly optimized context window.
+   * Gemini Omni (specifically Gemini Omni Flash)
+       * Status: Live / Available now.
+       * Details: Google's new "world model" family capable of processing text,
+         audio, image, and video simultaneously. It allows Pro users to generate and
+         converse-edit high-fidelity videos.
+   * Nano Banana 2
+       * Status: Live / Available now.
+       * Details: The latest specialized AI image generation model, providing
+         massive upgrades in prompt alignment, photorealism, style consistency, and
+         native canvas-based editing.
+   * Gemma 4 (Open-Weight Models)
+       * Status: Live / Available now.
+       * Details: The newest state-of-the-art open-source models (with configured
+         sizes like gemma-4-31b-it and gemma-4-26b-a4b-it accessible in the system),
+         supporting built-in reasoning and fast local execution.
+   * Gemini 3.5 Pro
+       * Status: Announced (Releasing June 2026 / Currently in early developer
+         testing).
+       * Details: The next-generation flagship Pro model featuring advanced context
+         recall and multimodal generation capabilities.
+   * Gemini Spark
+       * Status: Beta (Rollout beginning late May 2026).
+       * Details: A small, on-device agentic model optimized for Android and
+         ChromeOS featuring "Adaptive Context" for autonomous, offline background
+  Active & Core Models (Currently Configured)
+   * Gemini 3.1 Pro
+       * Status: Live / Available now (Flagship Pro Reasoning Model).
+       * Details: Equipped with a 2 million token context window, this model handles
+         extremely large-scale coding bases, long videos, and deep research tasks.
+   * Deep Think 3.1
+       * Status: Live / Available now.
+       * Details: A specialized reasoning mode that leverages chain-of-thought
+         processing to solve extremely difficult math, coding, and scientific logic
+         problems.
+   * Gemini 3.1 Flash-Lite-Preview
+       * Status: Live / Available now.
+       * Details: Low-latency, highly optimized model used for quick-fire mobile
+         briefs, background classification, and rapid text correction.
+   * Gemini 3.0 Pro & Flash Preview Models
+       * Status: Live / Available now (Beta/Preview).
+       *    gemini-3-pro-preview* (Core multimodal reasoning model with native
+         thinking capability)
+       *    gemini-3-flash-preview* (Balanced, fast preview model)
+   * Gemini 2.5 Models (Standard Backbones)
+       * Status: Live / Available now (Standard General-Purpose Series).
+       *    gemini-2.5-pro* (Flagship 2.5-generation reasoning)
+       *    gemini-2.5-flash* (High-speed, cost-efficient 2.5 task runner)
+       *    gemini-2.5-flash-lite* (Ultra low-latency lightweight engine)
+
+#############################
+
+✦  * Gemini 3.1 Preview Models
+     * gemini-3.1-pro-preview (Family: gemini-3, Tier: pro, Thinking/Reasoning enabled, Multimodal tool use enabled)
+     * gemini-3.1-flash-lite-preview (Family: gemini-3, Tier: flash-lite, Multimodal tool use enabled)
+   * Gemini 3 Preview Models
+     * gemini-3-pro-preview (Family: gemini-3, Tier: pro, Thinking/Reasoning enabled, Multimodal tool use enabled)
+     * gemini-3-flash-preview (Family: gemini-3, Tier: flash, Multimodal tool use enabled)
+   * Gemini 2.5 Models
+     * gemini-2.5-pro (Family: gemini-2.5, Tier: pro, Thinking disabled, Multimodal tool use disabled)
+     * gemini-2.5-flash (Family: gemini-2.5, Tier: flash, Thinking disabled, Multimodal tool use disabled)
+     * gemini-2.5-flash-lite (Family: gemini-2.5, Tier: flash-lite, Thinking disabled, Multimodal tool use disabled)
+   * Gemma 4 Models (Open Models)
+     * gemma-4-31b-it (Family: gemma-4, Tier: custom, Thinking/Reasoning enabled)
+     * gemma-4-26b-a4b-it (Family: gemma-4, Tier: custom, Thinking/Reasoning enabled)
+   * Routing Shortcuts & Aliases
+     * auto (System selects the best model, resolving to gemini-3-pro-preview or falling back based on preview/permissions config)
+     * pro (Resolves to gemini-3-pro-preview or falls back to gemini-2.5-pro depending on access)
+     * flash (Resolves to gemini-3-flash-preview or falls back to gemini-2.5-flash)
+     * flash-lite (Resolves to gemini-2.5-flash-lite or upgrades to gemini-3.1-flash-lite-preview depending on configuration)
+     * auto-gemini-3 (Directs task to best available Gemini 3 series model)
+     * auto-gemini-2.5 (Directs task to best available Gemini 2.5 series model)
+
+
