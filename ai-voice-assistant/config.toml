@@ -16,7 +16,7 @@ input_device = ""             # "" = system default input
 silence_ms = 700              # stop after this much continuous silence
 min_speech_ms = 300           # discard utterances shorter than this
 max_record_ms = 15000         # hard cap on a single utterance
-vad_threshold = 0.5           # silero-vad speech probability cutoff
+vad_aggressiveness = 2        # webrtcvad aggressiveness: 0 (lax) .. 3 (strict)
 start_grace_ms = 1500         # wait this long for speech to start, else abort
 
 [whisper]
