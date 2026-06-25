@@ -1,1 +1,17 @@
+# Environment files (API keys, secrets)
+.env
+.env.*
 */.env
+*/.env.*
+
+# Editor backup files
+*~
+*.swp
+*.swo
+*.save
+*.orig
+
+# IDE/editor config
+.idea/
+.vscode/
+*.sublime-workspace
