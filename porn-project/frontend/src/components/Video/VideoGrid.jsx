@@ -88,7 +88,7 @@ export default function VideoGrid() {
                 className={`video-grid${viewMode === 'list' ? ' list-view' : ''}`}
                 style={{ height: '100%' }}
               >
-                <AnimatePresence mode="popLayout">
+                <AnimatePresence>
                   {rowVideos.map((video) => (
                     <VideoCard
                       key={video.viewkey}

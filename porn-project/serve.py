@@ -8,6 +8,7 @@ import http.server
 import socketserver
 import webbrowser
 import os
+import sys
 import glob
 import threading
 import time
@@ -24,7 +25,7 @@ FILE = "z3ncoding_videos_grid.html"
 DATA_FILES = {
     "categories": {"path": "categories.json", "type": "json", "default": {}},
     "blacklist": {"path": "blacklist.txt", "type": "text", "default": []},
-    "videos": {"path": "manual_videos.json", "type": "json", "default": []},
+    "videos": {"path": "videos.json", "type": "json", "default": []},
     "playlists": {"path": "playlists.json", "type": "json", "default": {}},
     "tags": {"path": "tags.json", "type": "json", "default": {}},
     "history": {"path": "history.json", "type": "json", "default": []},
@@ -260,10 +261,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 socketserver.ThreadingTCPServer.allow_reuse_address = True
 
+# Check for --no-browser flag
+NO_BROWSER = "--no-browser" in sys.argv
+
 with socketserver.ThreadingTCPServer(("", PORT), Handler) as httpd:
     url = f"http://localhost:{PORT}/{FILE}?v={int(time.time())}"
     print(f"Serving at http://localhost:{PORT}")
-    print(f"Opening {url}")
+    if not NO_BROWSER:
+        print(f"Opening {url}")
     print("Press Ctrl+C to stop.\n")
 
     def open_browser():
@@ -344,7 +349,8 @@ with socketserver.ThreadingTCPServer(("", PORT), Handler) as httpd:
         print("Browser window closed. Shutting down server...")
         httpd.shutdown()
 
-    threading.Timer(0.5, open_browser).start()
+    if not NO_BROWSER:
+        threading.Timer(0.5, open_browser).start()
 
     try:
         httpd.serve_forever()

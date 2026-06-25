@@ -18,7 +18,14 @@ export default function PlayerPanel() {
   const iframeRef = useRef(null);
   const [showQualityMenu, setShowQualityMenu] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const autoNextTimerRef = useRef(null);
+
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
 
   // Load streams when video changes
   useEffect(() => {
@@ -140,8 +147,8 @@ export default function PlayerPanel() {
           style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000' }}
         />
 
-        {/* Quality button */}
-        {streams.length > 1 && (
+        {/* Quality button — hidden in fullscreen so native controls can auto-hide */}
+        {streams.length > 1 && !isFullscreen && (
           <div style={{ position: 'absolute', bottom: 16, right: 16 }}>
             <button
               className="quality-btn"

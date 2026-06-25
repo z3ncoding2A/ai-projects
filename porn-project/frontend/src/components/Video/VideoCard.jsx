@@ -96,7 +96,6 @@ const VideoCard = memo(function VideoCard({ video, isActive, isFocused }) {
 
   return (
     <motion.div
-      layout
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.9 }}
@@ -141,13 +140,15 @@ const VideoCard = memo(function VideoCard({ video, isActive, isFocused }) {
         />
 
         {/* Preview overlay */}
-        <img
-          ref={previewRef}
-          className="preview-img"
-          src=""
-          alt=""
-          style={{ opacity: 0 }}
-        />
+        {video.remoteThumbnail && (
+          <img
+            ref={previewRef}
+            className="preview-img"
+            src={video.remoteThumbnail}
+            alt=""
+            style={{ opacity: 0 }}
+          />
+        )}
 
         <div className="card-scrim" />
 

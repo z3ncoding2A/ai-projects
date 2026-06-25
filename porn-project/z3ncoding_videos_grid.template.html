@@ -5,32 +5,32 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="referrer" content="no-referrer">
     <title>z3ncoding Library (__TOTAL_VIDEOS_COUNT__)</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
-            --bg-base:          #08090b;
-            --bg-surface:       #111318;
-            --bg-card:          #161a22;
-            --bg-card-hover:    #1e2330;
-            --bg-topbar:        rgba(8,9,11,0.92);
-            --text-primary:     #f0f2f5;
-            --text-secondary:   #8b92a5;
-            --text-muted:       #4a5068;
-            --accent:           #e50914;
-            --accent-glow:      rgba(229,9,20,0.35);
-            --border:           rgba(255,255,255,0.07);
-            --border-strong:    rgba(255,255,255,0.14);
+            --bg-base:          #0a0b10;
+            --bg-surface:       rgba(17, 19, 24, 0.6);
+            --bg-card:          rgba(22, 26, 34, 0.4);
+            --bg-card-hover:    rgba(30, 35, 48, 0.7);
+            --bg-topbar:        rgba(10, 11, 16, 0.7);
+            --text-primary:     #f8fafc;
+            --text-secondary:   #94a3b8;
+            --text-muted:       #475569;
+            --accent:           #f43f5e;
+            --accent-glow:      rgba(244, 63, 94, 0.4);
+            --border:           rgba(255, 255, 255, 0.05);
+            --border-strong:    rgba(255, 255, 255, 0.1);
 
-            --cat-public:  #2ecc71;
+            --cat-public:  #10b981;
             --cat-pending: #8b5cf6;
-            --cat-least:   #7f8c9a;
+            --cat-least:   #64748b;
             --cat-avg:     #3b82f6;
             --cat-most:    #f59e0b;
-            --cat-explode: #ff2d78;
+            --cat-explode: #ec4899;
 
-            --topbar-h: 56px;
-            --list-w: 40%;
+            --topbar-h: 64px;
+            --list-w: 45%;
         }
 
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -49,22 +49,24 @@
             top: 0; left: 0; right: 0;
             height: var(--topbar-h);
             background: var(--bg-topbar);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
             border-bottom: 1px solid var(--border);
             display: flex;
             align-items: center;
-            gap: 4px;
-            padding: 0 14px;
+            gap: 8px;
+            padding: 0 20px;
             z-index: 200;
             overflow-x: auto;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
         }
         .top-bar::-webkit-scrollbar { display: none; }
 
         .brand {
-            font-size: 0.9rem;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1.1rem;
             font-weight: 700;
-            letter-spacing: 0.05em;
+            letter-spacing: 0.02em;
             color: var(--accent);
             white-space: nowrap;
             margin-right: 10px;
@@ -78,12 +80,12 @@
             border: 1px solid transparent;
             border-radius: 20px;
             color: var(--text-secondary);
-            font-family: inherit;
-            font-size: 0.78rem;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.85rem;
             font-weight: 500;
-            padding: 5px 13px;
+            padding: 6px 16px;
             cursor: pointer;
-            transition: all 0.18s ease;
+            transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
             white-space: nowrap;
         }
         .tab-btn:hover {
@@ -95,20 +97,21 @@
             background: var(--accent);
             border-color: var(--accent);
             color: #fff;
-            font-weight: 600;
+            font-weight: 700;
+            box-shadow: 0 4px 12px var(--accent-glow);
         }
         .tab-btn.tab-explode { color: var(--cat-explode); }
-        .tab-btn.tab-explode.active { background: var(--cat-explode); border-color: var(--cat-explode); color: #fff; }
+        .tab-btn.tab-explode.active { background: var(--cat-explode); border-color: var(--cat-explode); color: #fff; box-shadow: 0 4px 12px rgba(236, 72, 153, 0.4); }
         .tab-btn.tab-most { color: var(--cat-most); }
-        .tab-btn.tab-most.active { background: var(--cat-most); border-color: var(--cat-most); color: #fff; }
+        .tab-btn.tab-most.active { background: var(--cat-most); border-color: var(--cat-most); color: #fff; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4); }
         .tab-btn.tab-public { color: var(--cat-public); }
-        .tab-btn.tab-public.active { background: var(--cat-public); border-color: var(--cat-public); color: #fff; }
+        .tab-btn.tab-public.active { background: var(--cat-public); border-color: var(--cat-public); color: #fff; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4); }
         .tab-btn.tab-pending { color: var(--cat-pending); }
-        .tab-btn.tab-pending.active { background: var(--cat-pending); border-color: var(--cat-pending); color: #fff; }
+        .tab-btn.tab-pending.active { background: var(--cat-pending); border-color: var(--cat-pending); color: #fff; box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4); }
         .tab-btn.tab-avg { color: var(--cat-avg); }
-        .tab-btn.tab-avg.active { background: var(--cat-avg); border-color: var(--cat-avg); color: #fff; }
+        .tab-btn.tab-avg.active { background: var(--cat-avg); border-color: var(--cat-avg); color: #fff; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4); }
         .tab-btn.tab-least { color: var(--cat-least); }
-        .tab-btn.tab-least.active { background: var(--cat-least); border-color: var(--cat-least); color: #fff; }
+        .tab-btn.tab-least.active { background: var(--cat-least); border-color: var(--cat-least); color: #fff; box-shadow: 0 4px 12px rgba(100, 116, 139, 0.4); }
 
         .topbar-spacer { flex: 1; }
 
@@ -216,45 +219,55 @@
         }
         .list-meta b { color: var(--text-secondary); }
 
+        /* ── VIDEO LIST GRID ── */
         .video-list {
             flex: 1;
             overflow-y: auto;
-            overflow-x: hidden;
-            padding: 6px;
+            padding: 16px;
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-            grid-auto-rows: max-content;
-            gap: 5px;
+            gap: 16px;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
             align-content: start;
         }
-        .video-list::-webkit-scrollbar { width: 4px; }
+        @media (max-width: 500px) {
+            .video-list { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+        }
+
+        .video-list::-webkit-scrollbar { width: 8px; }
         .video-list::-webkit-scrollbar-track { background: transparent; }
-        .video-list::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
+        .video-list::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
+        .video-list::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
         /* sentinel needs to span full width to trigger intersection */
         #sentinel { grid-column: 1 / -1; height: 24px; }
 
-        /* ── VIDEO GRID ITEM ── */
+        /* ── VIDEO ITEM CARD ── */
         .video-item {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
             display: flex;
             flex-direction: column;
             cursor: pointer;
-            border-radius: 7px;
-            overflow: hidden;
-            transition: transform 0.15s, box-shadow 0.15s;
+            transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
             position: relative;
-            border: 2px solid transparent;
-            background: var(--bg-card);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }
         .video-item:hover {
-            transform: scale(1.03);
-            box-shadow: 0 6px 24px rgba(0,0,0,0.55);
+            background: var(--bg-card-hover);
+            transform: translateY(-4px);
+            box-shadow: 0 12px 20px rgba(0,0,0,0.3);
             border-color: var(--border-strong);
-            z-index: 2;
         }
         .video-item.active {
             border-color: var(--accent);
-            box-shadow: 0 0 0 2px var(--accent-glow);
+            box-shadow: 0 0 0 1px var(--accent), 0 12px 20px rgba(0,0,0,0.3);
+        }
+        .video-item.selected {
+            border: 2px solid var(--accent);
+            transform: scale(0.98);
         }
         .video-item.focused {
             border-color: #fff;
@@ -266,36 +279,42 @@
         .item-thumb-wrap {
             position: relative;
             width: 100%;
-            aspect-ratio: 16 / 9;
-            overflow: hidden;
             background: #000;
+            overflow: hidden;
             flex-shrink: 0;
+            min-height: 140px;
         }
         .item-thumb-wrap img {
             width: 100%;
-            height: 100%;
+            aspect-ratio: 16/9;
             object-fit: cover;
             display: block;
+            transition: transform 0.5s ease, opacity 0.3s ease;
+        }
+        .video-item:hover .item-thumb-wrap .base-img {
+            transform: scale(1.05);
         }
         .item-duration {
             position: absolute;
-            bottom: 3px;
-            right: 4px;
-            background: rgba(0,0,0,0.82);
+            bottom: 6px;
+            right: 6px;
+            background: rgba(0,0,0,0.75);
+            backdrop-filter: blur(4px);
             color: #fff;
-            font-size: 0.6rem;
-            font-weight: 600;
-            padding: 1px 4px;
-            border-radius: 3px;
+            font-size: 0.7rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 500;
+            z-index: 2;
         }
         .item-cat-dot {
             position: absolute;
-            top: 5px;
-            left: 5px;
-            width: 8px;
-            height: 8px;
+            top: 6px; right: 6px;
+            width: 10px; height: 10px;
             border-radius: 50%;
-            box-shadow: 0 0 4px rgba(0,0,0,0.6);
+            z-index: 2;
+            box-shadow: 0 0 8px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.2);
         }
         .item-play-overlay {
             position: absolute;
@@ -310,26 +329,37 @@
         }
         .video-item:hover .item-play-overlay { opacity: 1; }
 
-        /* Bottom bar: tiny title + cat buttons on hover */
-        .item-info {
-            padding: 4px 5px 3px;
-            min-width: 0;
+        .item-details {
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            position: relative;
+            z-index: 3;
+            background: linear-gradient(to top, var(--bg-card) 0%, transparent 100%);
         }
         .item-title {
-            font-size: 0.65rem;
-            font-weight: 400;
-            color: var(--text-secondary);
-            line-height: 1.3;
+            font-size: 0.85rem;
+            font-weight: 500;
+            line-height: 1.4;
+            color: var(--text-primary);
             display: -webkit-box;
-            -webkit-line-clamp: 1;
-            line-clamp: 1;
+            -webkit-line-clamp: 2;
             -webkit-box-orient: vertical;
             overflow: hidden;
-            white-space: nowrap;
-            text-overflow: ellipsis;
+            margin-bottom: 6px;
+            font-family: 'Space Grotesk', sans-serif;
+            transition: color 0.2s;
         }
         .video-item.active .item-title { color: var(--accent); }
-        .item-meta { display: none; }
+        .item-meta {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
 
         /* category action buttons — appear on hover */
         .item-actions {
@@ -515,16 +545,18 @@
             flex: 1;
             display: flex;
             flex-direction: column;
-            background: #000;
+            background: linear-gradient(135deg, #0f1118 0%, #050608 100%);
             overflow: hidden;
+            position: relative;
         }
 
         .player-frame-area {
             flex: 1;
             position: relative;
-            background: #000;
+            background: rgba(0,0,0,0.4);
+            box-shadow: inset 0 0 50px rgba(0,0,0,0.5);
         }
-        .player-frame-area iframe {
+        .player-frame-area iframe, .player-frame-area video {
             width: 100%;
             height: 100%;
             border: none;
@@ -543,24 +575,26 @@
             color: var(--text-muted);
             pointer-events: none;
         }
-        .player-empty .icon { font-size: 3.5rem; opacity: 0.25; }
-        .player-empty p { font-size: 0.85rem; }
+        .player-empty .icon { font-size: 4rem; opacity: 0.15; filter: drop-shadow(0 0 20px rgba(244,63,94,0.2)); }
+        .player-empty p { font-size: 0.95rem; letter-spacing: 0.05em; text-transform: uppercase; }
 
         /* Now-playing strip */
         .now-playing-bar {
-            padding: 10px 15px;
-            background: var(--bg-card);
-            border-top: 1px solid var(--border-color);
+            padding: 12px 20px;
+            background: rgba(22, 26, 34, 0.6);
+            backdrop-filter: blur(12px);
+            border-top: 1px solid var(--border);
             display: none !important;
             align-items: center;
             justify-content: space-between;
-            gap: 12px;
+            gap: 16px;
             flex-shrink: 0;
-            min-height: 48px;
+            min-height: 60px;
         }
         .np-title {
             flex: 1;
-            font-size: 0.83rem;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1rem;
             font-weight: 500;
             color: var(--text-primary);
             white-space: nowrap;
@@ -1064,8 +1098,13 @@
     function createVideoItem(v, i) {
         const isWatched = HISTORY.has(v[8]);
         const isSelected = selectedVideos.has(v[8]);
+        
+        // v[9] contains the category
+        const cat = v[9] || 'none';
+        const dotColor = getCategoryColor(cat);
+
         const item = document.createElement('div');
-        item.className = `video-card ${v[8] === currentVideoKey ? 'active' : ''} ${isWatched ? 'watched' : ''} ${isSelected ? 'selected' : ''}`;
+        item.className = `video-item ${isWatched ? 'watched' : ''} ${isSelected ? 'selected' : ''}`;
         item.dataset.index = i;
         item.dataset.viewkey = v[8];
         item.dataset.url = v[2];
@@ -1074,13 +1113,17 @@
         item.innerHTML = `
             <div class="eye-icon">👁</div>
             <div class="item-thumb-wrap">
-                <img src="${v[3]}" alt="" loading="lazy">
+                ${dotColor !== 'transparent' ? `<div class="item-cat-dot" style="background:${dotColor};"></div>` : ''}
+                <img class="base-img" src="${v[3]}" alt="" loading="lazy">
                 ${v[4] ? `<span class="item-duration">${v[4]}</span>` : ''}
                 <div class="item-play-overlay">▶</div>
                 <img class="preview-img" src="" alt="">
             </div>
-            <div class="item-info">
+            <div class="item-details">
                 <div class="item-title">${v[1]}</div>
+                <div class="item-meta">
+                    <span>${v[6]}</span>
+                </div>
                 <div class="item-actions">
                     <button class="cat-btn add" onclick="addToQueue(event, '${v[8]}')">+</button>
                     <button class="cat-btn del" onclick="deleteVideo('${v[8]}')">✕</button>

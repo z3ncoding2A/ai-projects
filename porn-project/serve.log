@@ -1,5 +1,85 @@
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 46848)
+Traceback (most recent call last):
+  File "/home/z3ncoding123/ai-projects/porn-project/serve.py", line 127, in do_GET
+    self._json_response(200, data)
+  File "/home/z3ncoding123/ai-projects/porn-project/serve.py", line 170, in _json_response
+    self.wfile.write(body)
+  File "/usr/lib/python3.11/socketserver.py", line 834, in write
+    self._sock.sendall(b)
+ConnectionResetError: [Errno 104] Connection reset by peer
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/socketserver.py", line 691, in process_request_thread
+    self.finish_request(request, client_address)
+  File "/usr/lib/python3.11/socketserver.py", line 361, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "/usr/lib/python3.11/http/server.py", line 671, in __init__
+    super().__init__(*args, **kwargs)
+  File "/usr/lib/python3.11/socketserver.py", line 755, in __init__
+    self.handle()
+  File "/usr/lib/python3.11/http/server.py", line 436, in handle
+    self.handle_one_request()
+  File "/usr/lib/python3.11/http/server.py", line 424, in handle_one_request
+    method()
+  File "/home/z3ncoding123/ai-projects/porn-project/serve.py", line 129, in do_GET
+    self._json_response(500, {"error": str(e)})
+  File "/home/z3ncoding123/ai-projects/porn-project/serve.py", line 169, in _json_response
+    self.end_headers()
+  File "/home/z3ncoding123/ai-projects/porn-project/serve.py", line 43, in end_headers
+    super().end_headers()
+  File "/usr/lib/python3.11/http/server.py", line 538, in end_headers
+    self.flush_headers()
+  File "/usr/lib/python3.11/http/server.py", line 542, in flush_headers
+    self.wfile.write(b"".join(self._headers_buffer))
+  File "/usr/lib/python3.11/socketserver.py", line 834, in write
+    self._sock.sendall(b)
+BrokenPipeError: [Errno 32] Broken pipe
+----------------------------------------
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 46852)
+Traceback (most recent call last):
+  File "/home/z3ncoding123/ai-projects/porn-project/serve.py", line 127, in do_GET
+    self._json_response(200, data)
+  File "/home/z3ncoding123/ai-projects/porn-project/serve.py", line 170, in _json_response
+    self.wfile.write(body)
+  File "/usr/lib/python3.11/socketserver.py", line 834, in write
+    self._sock.sendall(b)
+ConnectionResetError: [Errno 104] Connection reset by peer
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/usr/lib/python3.11/socketserver.py", line 691, in process_request_thread
+    self.finish_request(request, client_address)
+  File "/usr/lib/python3.11/socketserver.py", line 361, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "/usr/lib/python3.11/http/server.py", line 671, in __init__
+    super().__init__(*args, **kwargs)
+  File "/usr/lib/python3.11/socketserver.py", line 755, in __init__
+    self.handle()
+  File "/usr/lib/python3.11/http/server.py", line 436, in handle
+    self.handle_one_request()
+  File "/usr/lib/python3.11/http/server.py", line 424, in handle_one_request
+    method()
+  File "/home/z3ncoding123/ai-projects/porn-project/serve.py", line 129, in do_GET
+    self._json_response(500, {"error": str(e)})
+  File "/home/z3ncoding123/ai-projects/porn-project/serve.py", line 169, in _json_response
+    self.end_headers()
+  File "/home/z3ncoding123/ai-projects/porn-project/serve.py", line 43, in end_headers
+    super().end_headers()
+  File "/usr/lib/python3.11/http/server.py", line 538, in end_headers
+    self.flush_headers()
+  File "/usr/lib/python3.11/http/server.py", line 542, in flush_headers
+    self.wfile.write(b"".join(self._headers_buffer))
+  File "/usr/lib/python3.11/socketserver.py", line 834, in write
+    self._sock.sendall(b)
+BrokenPipeError: [Errno 32] Broken pipe
+----------------------------------------
 Serving at http://localhost:8888
-Opening http://localhost:8888/z3ncoding_videos_grid.html?v=1782336532
+Opening http://localhost:8888/z3ncoding_videos_grid.html?v=1782343302
 Press Ctrl+C to stop.
 
 Browser window closed. Shutting down server...

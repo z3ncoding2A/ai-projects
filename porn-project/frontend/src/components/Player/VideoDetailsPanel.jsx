@@ -2,7 +2,8 @@ import { useState } from 'react';
 import useVideoStore from '../../stores/useVideoStore';
 
 export default function VideoDetailsPanel({ video }) {
-  const tags = useVideoStore((s) => s.tags[video.viewkey] || []);
+  const rawTags = useVideoStore((s) => s.tags[video.viewkey]);
+  const tags = rawTags || [];
   const addTag = useVideoStore((s) => s.addTag);
   const removeTag = useVideoStore((s) => s.removeTag);
   
