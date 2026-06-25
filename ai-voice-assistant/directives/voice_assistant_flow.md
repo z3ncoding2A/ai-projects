@@ -15,11 +15,13 @@ re-arm.
 
 - Wake word: **openWakeWord** (ONNX), local.
 - STT: **faster-whisper** on CUDA (`int8_float16`), CPU/`int8` fallback. Local.
-- VAD (record-until-silence): **silero-vad**.
+- VAD (record-until-silence): **webrtcvad** (imports as `webrtcvad`; package
+  `webrtcvad-wheels`). faster-whisper's own `vad_filter=True` is a second guard on the
+  captured buffer.
 - LLM: **cloud Anthropic Claude** with tool-calling + streaming (`anthropic` SDK). Key from
   `ANTHROPIC_API_KEY` env (loaded from `.env` via `python-dotenv`).
 - TTS: **Piper** via subprocess, streamed and sentence-chunked into `aplay`.
-- UI: **PyQt6** frameless overlay positioned by Hyprland `windowrulev2`.
+- UI: **PyQt6** frameless overlay positioned by a Hyprland `windowrule` (v0.53+ syntax).
 
 ## Data conventions
 
@@ -66,7 +68,7 @@ input_device: str          # "" => default device
 silence_ms: int
 min_speech_ms: int
 max_record_ms: int
-recorder_vad_threshold: float
+recorder_vad_aggressiveness: int   # webrtcvad 0..3
 start_grace_ms: int
 # [whisper]
 whisper_model: str
@@ -94,6 +96,63 @@ ui_height: int
 # [logging]
 log_level: str
 ```
+
+## Python imports & packaging (binding)
+
+- `execution/` is a package (`execution/__init__.py` exists). The daemon runs as
+  `python -m execution.daemon` **from the repo root**.
+- Cross-module imports use the **absolute** form: `from execution.hypr import dispatch_exec`,
+  `from execution.config import Settings, load_settings`, etc. Do **not** use bare
+  `import hypr` or relative `from .hypr import`.
+- Each module's `if __name__ == "__main__":` CLI must also work via `python -m execution.<mod>`.
+
+## Library landmines (verify against the INSTALLED package — do not code from memory)
+
+The deps are installed in `.venv`. Before writing a module, introspect the real API
+(`.venv/bin/python -c "import X; help(X.thing)"` or read the package source). Known traps:
+- **openWakeWord**: construct `openwakeword.Model(wakeword_models=[<name-or-path>],
+  inference_framework="onnx")`; call `model.predict(int16_frame) -> {model_name: score}`.
+  You may need `openwakeword.utils.download_models()` once. Confirm exact arg/return shape.
+- **webrtcvad**: `webrtcvad.Vad(aggressiveness)`; `is_speech(pcm16_bytes, sample_rate)` needs
+  frames of exactly 10/20/30 ms (480 samples @16 kHz for 30 ms). Wrong frame size raises.
+- **piper**: `pip install piper-tts` may expose the CLI as `python -m piper` (not a bare
+  `piper` on PATH). The model's true sample rate is in the voice `.json` (`audio.sample_rate`)
+  — read it rather than hardcoding 22050 if they differ. Build the pipe accordingly.
+- **mic handoff**: `WakeWordListener.pause()` must `stop()`/close its `InputStream` (not just
+  ignore frames) so `record_until_silence` can open the device cleanly; `resume()` reopens it.
+- **faster-whisper**: `WhisperModel(...).transcribe(audio, ...)` returns
+  `(segments_generator, info)`; you must iterate the generator to get text.
+- **anthropic** (authoritative — from the `claude-api` skill; do NOT use stale recall):
+  - Client: `anthropic.Anthropic(api_key=settings.anthropic_api_key)`. Model from
+    `settings.llm_model` (default `claude-haiku-4-5`, a valid alias).
+  - Tool schema shape: `{"name": str, "description": str, "input_schema": {"type":"object",
+    "properties": {...}, "required": [...], "additionalProperties": False}}`. Optionally add
+    top-level `"strict": True` (a sibling of `name`, NOT on `tool_choice`).
+  - **Manual streaming tool-use loop** (the loop is non-streaming-shaped until the final turn):
+    ```python
+    messages = [{"role": "user", "content": user_text}]
+    while True:
+        with client.messages.stream(model=settings.llm_model,
+                                     max_tokens=settings.llm_max_tokens,
+                                     system=SYSTEM_PROMPT, tools=schemas,
+                                     messages=messages) as stream:
+            for chunk in stream.text_stream:
+                ...  # buffer + yield on sentence boundaries
+            msg = stream.get_final_message()
+        messages.append({"role": "assistant", "content": msg.content})
+        if msg.stop_reason == "tool_use":
+            results = [{"type": "tool_result", "tool_use_id": b.id,
+                        "content": call_tool(b.name, b.input)}
+                       for b in msg.content if b.type == "tool_use"]
+            messages.append({"role": "user", "content": results})
+            continue
+        break  # end_turn (or refusal → yield a short apology)
+    ```
+  - Handle `msg.stop_reason == "refusal"` (yield one short apology sentence, then stop).
+  - **Do NOT pass `thinking`, `output_config`/`effort`, `temperature`, `top_p`, or `top_k`** —
+    keeps the router valid across Haiku 4.5 (rejects `effort`) and Opus-4.8-class models
+    (reject sampling params), and minimizes latency. `max_tokens` (1024) is well under the
+    streaming-required threshold, so plain `messages.create` also works for `respond()`.
 
 ## Module contracts (`execution/`)
 
@@ -124,10 +183,14 @@ log_level: str
 ### recorder.py
 - `def record_until_silence(settings: Settings, on_level: Callable[[float], None] | None =
   None) -> "np.ndarray"` — open a 16 kHz mono float32 `InputStream`; buffer frames; use
-  silero-vad to detect speech; begin capturing on first speech (give up after
-  `start_grace_ms` of no speech → return empty array); stop after `silence_ms` of continuous
-  non-speech or `max_record_ms` cap. Discard and return empty array if captured speech <
-  `min_speech_ms`. `on_level` (optional) receives per-frame RMS for UI metering.
+  **webrtcvad** for speech/non-speech decisions. webrtcvad requires **16-bit PCM** frames of
+  exactly 10/20/30 ms — use **30 ms = 480 samples @ 16 kHz**; convert each float32 frame to
+  int16 bytes before `vad.is_speech(frame_bytes, 16000)`. Begin capturing on first detected
+  speech (give up after `start_grace_ms` of no speech → return empty array); stop after
+  `silence_ms` of continuous non-speech or `max_record_ms` cap. Discard and return empty
+  array if captured speech < `min_speech_ms`. `on_level` (optional) receives per-frame RMS
+  for UI metering. NOTE: the 480-sample VAD frame is independent of the wake listener's
+  `frame_size`; read the stream in 480-sample blocks here.
 
 ### transcribe.py
 - `class Transcriber:`

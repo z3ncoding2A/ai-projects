@@ -6,6 +6,7 @@
     <meta name="referrer" content="no-referrer">
     <title>z3ncoding Library (__TOTAL_VIDEOS_COUNT__)</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
             --bg-base:          #08090b;
@@ -722,6 +723,65 @@
             transition: opacity 0.25s;
         }
         .item-thumb-wrap:hover .preview-img { opacity: 1; }
+        /* ── PROGRESSIVE FEATURES (Route 4) ── */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.8);
+            backdrop-filter: blur(4px);
+            z-index: 1000;
+            display: none;
+            align-items: center; justify-content: center;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+            width: 90%; max-width: 500px;
+            max-height: 90vh; overflow-y: auto;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+        }
+        .modal h2 { margin-bottom: 16px; font-size: 1.2rem; color: var(--text-primary); }
+        .modal .form-group { margin-bottom: 12px; }
+        .modal .form-group label { display: block; margin-bottom: 4px; font-size: 0.8rem; color: var(--text-secondary); }
+        .modal input[type="text"], .modal input[type="number"] {
+            width: 100%; padding: 8px 12px;
+            background: var(--bg-card); border: 1px solid var(--border);
+            color: white; border-radius: 6px; outline: none;
+        }
+        .modal input[type="text"]:focus, .modal input[type="number"]:focus { border-color: var(--accent); }
+        .modal-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+        .modal-btn {
+            background: var(--bg-card); border: 1px solid var(--border);
+            color: var(--text-secondary); padding: 8px 16px; border-radius: 6px; cursor: pointer;
+        }
+        .modal-btn.primary { background: var(--accent); color: white; border-color: var(--accent); }
+        
+        .tag-pill {
+            display: inline-flex; align-items: center; gap: 6px;
+            background: var(--bg-card); border: 1px solid var(--border);
+            padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; margin: 0 4px 4px 0;
+        }
+        .tag-pill .remove-tag { cursor: pointer; color: var(--text-muted); }
+        .tag-pill .remove-tag:hover { color: var(--accent); }
+
+        .theater-active .list-panel { display: none !important; }
+        .theater-active .player-panel { width: 100vw !important; }
+
+        .bulk-bar {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            background: var(--accent); color: white; padding: 12px 24px;
+            border-radius: 30px; display: none; align-items: center; gap: 16px; z-index: 500;
+            box-shadow: 0 10px 20px rgba(229,9,20,0.3);
+        }
+        .bulk-bar.active { display: flex; }
+        .bulk-bar select { background: white; color: black; border: none; padding: 4px 8px; border-radius: 4px; outline: none; }
+        .bulk-bar button { background: rgba(0,0,0,0.3); color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
+
+        .eye-icon { position: absolute; top: 8px; left: 8px; background: rgba(0,0,0,0.7); padding: 4px 6px; border-radius: 4px; font-size: 0.7rem; z-index: 5; display: none; }
+        .video-card.watched .eye-icon { display: block; }
+        .video-card.selected { border: 2px solid var(--accent); }
     </style>
 </head>
 <body>
@@ -737,7 +797,15 @@
     <button class="tab-btn tab-most"         id="tab-most"    onclick="setTab('most')">Most Liked</button>
     <button class="tab-btn tab-explode"      id="tab-explode" onclick="setTab('explode')">💥 EXPLODE!!!</button>
     <div class="topbar-spacer"></div>
+
+    <button class="topbar-btn" onclick="toggleTheaterMode()" title="Theater Mode">🎬</button>
+    <button class="topbar-btn" onclick="document.getElementById('modal-stats').classList.add('active'); renderStats();" title="Statistics">📊</button>
+    <button class="topbar-btn" onclick="document.getElementById('modal-search').classList.add('active')" title="Advanced Search">⚙️ Adv</button>
+    <button class="topbar-btn" onclick="toggleBulkMode()" id="bulk-toggle-btn" title="Bulk Select">☑️ Bulk</button>
+
     <div class="topbar-actions">
+        <button class="topbar-btn" onclick="exportBackup()" title="Export Backup">📤 Export</button>
+        <button class="topbar-btn" onclick="importBackup()" title="Import Backup">📥 Import</button>
         <span class="sync-chip disconnected" id="sync-status">⚠ Not connected</span>
         <button onclick="connectFolder()" id="connect-folder-btn">📁 Connect Folder</button>
         <button onclick="toggleModal('export-modal')">Export</button>
@@ -804,7 +872,93 @@
         </div>
     </div>
 
-    <!-- RIGHT: PLAYER -->
+    <!-- Modals -->
+    <div id="modal-search" class="modal-overlay">
+        <div class="modal">
+            <h2>🔍 Advanced Search</h2>
+            <div class="form-group">
+                <label>Minimum Views</label>
+                <input type="number" id="adv-views" placeholder="e.g. 100000">
+            </div>
+            <div class="form-group">
+                <label>Minimum Duration (minutes)</label>
+                <input type="number" id="adv-duration" placeholder="e.g. 10">
+            </div>
+            <div class="form-group">
+                <label>Title Regex</label>
+                <input type="text" id="adv-regex" placeholder="e.g. ^public.*">
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn" onclick="document.getElementById('modal-search').classList.remove('active')">Cancel</button>
+                <button class="modal-btn primary" onclick="applyAdvancedSearch()">Apply Filters</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-details" class="modal-overlay">
+        <div class="modal">
+            <h2>🎬 Video Details</h2>
+            <div style="display:flex; gap:16px;">
+                <div style="flex:1;">
+                    <h3>Tags</h3>
+                    <div id="tags-container" style="margin-bottom:8px;"></div>
+                    <div style="display:flex; gap:4px;">
+                        <input type="text" id="new-tag-input" placeholder="New tag...">
+                        <button class="modal-btn" onclick="addTag()">Add</button>
+                    </div>
+                </div>
+                <div style="flex:1;">
+                    <h3>Playlists</h3>
+                    <div id="playlists-container" style="margin-bottom:8px;"></div>
+                    <div style="display:flex; gap:4px;">
+                        <input type="text" id="new-playlist-input" placeholder="New playlist...">
+                        <button class="modal-btn" onclick="createPlaylist()">Create</button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn" onclick="document.getElementById('modal-details').classList.remove('active')">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-stats" class="modal-overlay">
+        <div class="modal" style="max-width: 800px;">
+            <h2>📊 Statistics Dashboard</h2>
+            <div style="display:flex; gap:20px;">
+                <div style="flex:1;">
+                    <canvas id="categoryChart"></canvas>
+                </div>
+                <div style="flex:1;">
+                    <h3>Library Overview</h3>
+                    <p>Total Videos: <span id="stat-total-videos"></span></p>
+                    <p>Watched: <span id="stat-watched"></span></p>
+                    <p>Total Playlists: <span id="stat-playlists"></span></p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="modal-btn" onclick="document.getElementById('modal-stats').classList.remove('active')">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="bulk-bar" class="bulk-bar">
+        <span id="bulk-count">0 selected</span>
+        <select id="bulk-action-cat">
+            <option value="">Categorize as...</option>
+            <option value="none">None</option>
+            <option value="public">Public</option>
+            <option value="pending">Pending</option>
+            <option value="least">Least</option>
+            <option value="average">Average</option>
+            <option value="most">Most</option>
+            <option value="explode">Explode</option>
+        </select>
+        <button onclick="applyBulkCategory()">Apply</button>
+        <button onclick="clearBulkSelection()">Cancel</button>
+    </div>
+
+    <!-- MAIN LAYOUT -->
     <main class="player-panel">
         <div class="player-frame-area" id="player-frame-area">
             <div class="player-empty" id="player-empty">
@@ -836,12 +990,21 @@
 
 <script>
     const ALL_VIDEOS = __VIDEOS_JSON_DATA__;
+    
+    // Globals for Route 4 Progressive Features
+    let TAGS = {};           // viewkey -> Array<string>
+    let PLAYLISTS = {};      // playlistName -> Array<viewkey>
+    let HISTORY = new Set(); // Set of viewkeys
 
-    // ── State ──
-    let categories = {};
+    let filteredVideos = [...ALL_VIDEOS];
+    let isBulkMode = false;
+    let selectedVideos = new Set(); // viewkeys
+    let lastClickedIndex = -1;
+    let advancedSearch = { minViews: 0, minDuration: 0, regex: '' };
+
+    let currentVideoIndex = -1;
     let deleted    = new Set();
     let currentTab = 'none';
-    let filteredVideos = [];
     let currentIndex   = 0;
     const BATCH_SIZE   = 50;
     let activePreviewWrap = null;
@@ -898,46 +1061,36 @@
     }
 
     // ── Build list item ──
-    function createVideoItem(vid) {
-        const item      = document.createElement('div');
-        const viewkey   = vid[8];
-        const cat       = getVideoCategory(vid);
-        const dotColor  = getCategoryColor(cat);
-        const safeTitle = vid[1].replace(/"/g, '&quot;');
-        const safeUrl   = vid[2].replace(/"/g, '&quot;');
-
-        item.className  = 'video-item';
-        item.dataset.viewkey = viewkey;
-        item.dataset.url     = safeUrl;
-        item.dataset.title   = safeTitle;
-
+    function createVideoItem(v, i) {
+        const isWatched = HISTORY.has(v[8]);
+        const isSelected = selectedVideos.has(v[8]);
+        const item = document.createElement('div');
+        item.className = `video-card ${v[8] === currentVideoKey ? 'active' : ''} ${isWatched ? 'watched' : ''} ${isSelected ? 'selected' : ''}`;
+        item.dataset.index = i;
+        item.dataset.viewkey = v[8];
+        item.dataset.url = v[2];
+        item.dataset.title = v[1];
+        
         item.innerHTML = `
-            <div class="item-thumb-wrap" data-preview="${vid[11]}">
-                <button class="add-queue-btn" onclick="addToQueue(event, '${viewkey}')" title="Add to Queue">+</button>
-                ${dotColor !== 'transparent' ? `<div class="item-cat-dot" style="background:${dotColor};"></div>` : ''}
-                <img src="${vid[3]}" alt="" loading="lazy" onerror="this.style.display='none'">
-                ${vid[4] ? `<span class="item-duration">${vid[4]}</span>` : ''}
+            <div class="eye-icon">👁</div>
+            <div class="item-thumb-wrap">
+                <img src="${v[3]}" alt="" loading="lazy">
+                ${v[4] ? `<span class="item-duration">${v[4]}</span>` : ''}
                 <div class="item-play-overlay">▶</div>
                 <img class="preview-img" src="" alt="">
             </div>
             <div class="item-info">
-                <div class="item-title" title="${safeTitle}">${vid[1]}</div>
-                <div class="item-meta">${vid[6]}</div>
-                <div class="item-actions" onclick="event.stopPropagation();">
-                    <button class="cat-btn btn-public"  onclick="categorize('${viewkey}','public')">PUB</button>
-                    <button class="cat-btn btn-pending" onclick="categorize('${viewkey}','pending')">PEND</button>
-                    <button class="cat-btn btn-least"   onclick="categorize('${viewkey}','least')">MIN</button>
-                    <button class="cat-btn btn-avg"     onclick="categorize('${viewkey}','average')">AVG</button>
-                    <button class="cat-btn btn-most"    onclick="categorize('${viewkey}','most')">MAX</button>
-                    <button class="cat-btn btn-explode" onclick="categorize('${viewkey}','explode')">💥</button>
-                    <button class="cat-btn btn-reset"   onclick="categorize('${viewkey}','none')">↺</button>
-                    <button class="cat-btn btn-delete"  onclick="deleteVideo('${viewkey}')">✕</button>
+                <div class="item-title">${v[1]}</div>
+                <div class="item-actions">
+                    <button class="cat-btn add" onclick="addToQueue(event, '${v[8]}')">+</button>
+                    <button class="cat-btn del" onclick="deleteVideo('${v[8]}')">✕</button>
+                    <button class="cat-btn" style="background:#555" onclick="openDetailsModal(event, '${v[8]}')">⚙</button>
                 </div>
             </div>
         `;
         item.addEventListener('click', (e) => {
-            if (e.target.closest('.item-actions')) return;
-            openVideoPlayer(item.dataset.url, item.dataset.title, viewkey);
+            if (isBulkMode) toggleSelection(v[8]);
+            else openVideoPlayer(v[2], v[1], v[8]);
         });
         return item;
     }
@@ -952,7 +1105,7 @@
         }
         const end = Math.min(currentIndex + BATCH_SIZE, filteredVideos.length);
         for (let i = currentIndex; i < end; i++) {
-            videoList.insertBefore(createVideoItem(filteredVideos[i]), sentinel);
+            videoList.insertBefore(createVideoItem(filteredVideos[i], i), sentinel);
         }
         currentIndex = end;
     }
@@ -962,13 +1115,25 @@
         const query    = searchInput.value.toLowerCase().trim();
         const sortMode = sortSelect.value;
 
+        let regexObj = null;
+        if (advancedSearch.regex) {
+            try { regexObj = new RegExp(advancedSearch.regex, 'i'); } 
+            catch(e) { console.warn('Invalid regex:', advancedSearch.regex); }
+        }
+
         filteredVideos = ALL_VIDEOS.filter(vid => {
             const cat       = getVideoCategory(vid);
             const isDeleted = deleted.has(vid[8]);
             const matchTab  = (currentTab === 'none') ? !['public','pending','least','average','most','explode'].includes(cat)
                                                        : cat === currentTab;
             const matchQ    = query === '' || vid[10].includes(query);
-            return !isDeleted && matchTab && matchQ;
+            
+            // Advanced Search Rules
+            const matchViews = vid[7] >= advancedSearch.minViews;
+            const matchDuration = vid[5] >= (advancedSearch.minDuration * 60);
+            const matchRegex = regexObj ? regexObj.test(vid[1]) : true;
+
+            return !isDeleted && matchTab && matchQ && matchViews && matchDuration && matchRegex;
         });
 
         if (sortMode === 'title-az')      filteredVideos.sort((a,b) => a[1].localeCompare(b[1]));
@@ -1695,9 +1860,252 @@
         }
     }, true);
 
+    // ── Route 4: Progressive Features ──
+    function exportBackup() {
+        const backup = {
+            categories,
+            tags: TAGS,
+            playlists: PLAYLISTS,
+            history: Array.from(HISTORY),
+            deleted: Array.from(deleted)
+        };
+        const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `z3ncoding_backup_${new Date().toISOString().slice(0,10)}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+    
+    function importBackup() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'application/json';
+        input.onchange = e => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = async event => {
+                try {
+                    const backup = JSON.parse(event.target.result);
+                    if (backup.categories) { categories = backup.categories; saveCategories(); }
+                    if (backup.tags) { TAGS = backup.tags; await syncToBackend('tags', TAGS); }
+                    if (backup.playlists) { PLAYLISTS = backup.playlists; await syncToBackend('playlists', PLAYLISTS); }
+                    if (backup.history) { HISTORY = new Set(backup.history); await syncToBackend('history', backup.history); }
+                    if (backup.deleted) {
+                        backup.deleted.forEach(vk => deleted.add(vk));
+                        const currentBlacklist = await fetch('/api/blacklist').then(r=>r.json()).catch(()=>[]);
+                        const newBlacklist = Array.from(new Set([...currentBlacklist, ...backup.deleted]));
+                        await syncToBackend('blacklist', newBlacklist);
+                    }
+                    alert('Backup imported successfully!');
+                    filterAndSort();
+                } catch(err) {
+                    alert('Invalid backup file');
+                    console.error(err);
+                }
+            };
+            reader.readAsText(file);
+        };
+        input.click();
+    }
+
+    async function syncToBackend(resource, data) {
+        try {
+            await fetch('/api/' + resource, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+        } catch (e) {
+            console.error('Failed to sync', resource, e);
+        }
+    }
+
+    function toggleTheaterMode() {
+        document.body.classList.toggle('theater-active');
+    }
+
+    // Bulk Mode
+    function toggleBulkMode() {
+        isBulkMode = !isBulkMode;
+        document.getElementById('bulk-toggle-btn').classList.toggle('active', isBulkMode);
+        document.getElementById('bulk-bar').classList.toggle('active', isBulkMode);
+        if (!isBulkMode) clearBulkSelection();
+    }
+    function clearBulkSelection() {
+        selectedVideos.clear();
+        lastClickedIndex = -1;
+        updateBulkCount();
+        renderGrid();
+    }
+    function updateBulkCount() {
+        document.getElementById('bulk-count').textContent = selectedVideos.size + ' selected';
+    }
+    function toggleSelection(viewkey, index, shiftKey) {
+        if (shiftKey && lastClickedIndex !== -1) {
+            const start = Math.min(lastClickedIndex, index);
+            const end = Math.max(lastClickedIndex, index);
+            for (let i = start; i <= end; i++) {
+                if (filteredVideos[i]) selectedVideos.add(filteredVideos[i][8]);
+            }
+        } else {
+            if (selectedVideos.has(viewkey)) selectedVideos.delete(viewkey);
+            else selectedVideos.add(viewkey);
+        }
+        lastClickedIndex = index;
+        updateBulkCount();
+        renderGrid();
+    }
+    function applyBulkCategory() {
+        const cat = document.getElementById('bulk-action-cat').value;
+        if (!cat) return;
+        selectedVideos.forEach(vk => {
+            if (cat === 'none') {
+                delete categories[vk];
+            } else {
+                categories[vk] = cat;
+            }
+        });
+        saveCategories();
+        clearBulkSelection();
+        filterAndSort();
+    }
+
+    // Advanced Search
+    function applyAdvancedSearch() {
+        advancedSearch.minViews = parseInt(document.getElementById('adv-views').value) || 0;
+        advancedSearch.minDuration = parseInt(document.getElementById('adv-duration').value) || 0;
+        advancedSearch.regex = document.getElementById('adv-regex').value;
+        document.getElementById('modal-search').classList.remove('active');
+        filterAndSort();
+    }
+
+    // Details Modal (Tags & Playlists)
+    let detailsViewkey = null;
+    function openDetailsModal(e, viewkey) {
+        e.stopPropagation();
+        detailsViewkey = viewkey;
+        renderDetails();
+        document.getElementById('modal-details').classList.add('active');
+    }
+    function renderDetails() {
+        if (!detailsViewkey) return;
+        const tagBox = document.getElementById('tags-container');
+        const playBox = document.getElementById('playlists-container');
+        
+        // Render Tags
+        const myTags = TAGS[detailsViewkey] || [];
+        tagBox.innerHTML = myTags.map(t => `<span class="tag-pill">#${t} <span class="remove-tag" onclick="removeTag('${t}')">✕</span></span>`).join('');
+        
+        // Render Playlists
+        const allPlays = Object.keys(PLAYLISTS);
+        playBox.innerHTML = allPlays.map(p => {
+            const hasIt = PLAYLISTS[p].includes(detailsViewkey);
+            return `<label style="display:block; font-size:0.8rem; margin-bottom:4px; color:var(--text-primary);">
+                <input type="checkbox" ${hasIt ? 'checked' : ''} onchange="togglePlaylist('${p}')"> ${p}
+            </label>`;
+        }).join('');
+    }
+    function addTag() {
+        const inp = document.getElementById('new-tag-input');
+        const val = inp.value.trim().toLowerCase();
+        if (!val || !detailsViewkey) return;
+        if (!TAGS[detailsViewkey]) TAGS[detailsViewkey] = [];
+        if (!TAGS[detailsViewkey].includes(val)) {
+            TAGS[detailsViewkey].push(val);
+            syncToBackend('tags', TAGS);
+            renderDetails();
+        }
+        inp.value = '';
+    }
+    function removeTag(tag) {
+        if (!detailsViewkey || !TAGS[detailsViewkey]) return;
+        TAGS[detailsViewkey] = TAGS[detailsViewkey].filter(t => t !== tag);
+        syncToBackend('tags', TAGS);
+        renderDetails();
+    }
+    function createPlaylist() {
+        const inp = document.getElementById('new-playlist-input');
+        const val = inp.value.trim();
+        if (!val) return;
+        if (!PLAYLISTS[val]) PLAYLISTS[val] = [];
+        if (detailsViewkey && !PLAYLISTS[val].includes(detailsViewkey)) PLAYLISTS[val].push(detailsViewkey);
+        syncToBackend('playlists', PLAYLISTS);
+        renderDetails();
+        inp.value = '';
+    }
+    function togglePlaylist(p) {
+        if (!detailsViewkey || !PLAYLISTS[p]) return;
+        if (PLAYLISTS[p].includes(detailsViewkey)) {
+            PLAYLISTS[p] = PLAYLISTS[p].filter(vk => vk !== detailsViewkey);
+        } else {
+            PLAYLISTS[p].push(detailsViewkey);
+        }
+        syncToBackend('playlists', PLAYLISTS);
+    }
+
+    // Stats
+    let chartInstance = null;
+    function renderStats() {
+        document.getElementById('stat-total-videos').textContent = ALL_VIDEOS.length;
+        document.getElementById('stat-watched').textContent = HISTORY.size;
+        document.getElementById('stat-playlists').textContent = Object.keys(PLAYLISTS).length;
+
+        const counts = { public:0, pending:0, least:0, average:0, most:0, explode:0 };
+        Object.values(categories).forEach(c => { if(counts[c] !== undefined) counts[c]++; });
+
+        const ctx = document.getElementById('categoryChart').getContext('2d');
+        if (chartInstance) chartInstance.destroy();
+        chartInstance = new Chart(ctx, {
+            type: 'pie',
+            data: {
+                labels: ['Public', 'Pending', 'Least', 'Average', 'Most Liked', 'Explode'],
+                datasets: [{
+                    data: [counts.public, counts.pending, counts.least, counts.average, counts.most, counts.explode],
+                    backgroundColor: ['#2ecc71', '#8b5cf6', '#7f8c9a', '#3b82f6', '#f59e0b', '#ff2d78'],
+                    borderWidth: 0
+                }]
+            },
+            options: { plugins: { legend: { labels: { color: '#f0f2f5' } } } }
+        });
+    }
+
+    // History tracking wrapper
+    const originalOpenVideoPlayer = openVideoPlayer;
+    openVideoPlayer = function(url, title, viewkey) {
+        if (!HISTORY.has(viewkey)) {
+            HISTORY.add(viewkey);
+            syncToBackend('history', Array.from(HISTORY));
+            // Trigger visual update for the grid item
+            const item = document.querySelector(`.video-item[data-viewkey="${viewkey}"]`);
+            if (item) item.classList.add('watched');
+        }
+        originalOpenVideoPlayer(url, title, viewkey);
+    };
+
     // ── Boot ──
-    filterAndSort();
-    initFileSystem();
+    async function boot() {
+        try {
+            const [tagsRes, playRes, histRes] = await Promise.all([
+                fetch('/api/tags'),
+                fetch('/api/playlists'),
+                fetch('/api/history')
+            ]);
+            if (tagsRes.ok) TAGS = await tagsRes.json();
+            if (playRes.ok) PLAYLISTS = await playRes.json();
+            if (histRes.ok) {
+                const histArray = await histRes.json();
+                HISTORY = new Set(histArray);
+            }
+        } catch (e) {
+            console.warn("API fetch failed, proceeding with empty progressive data", e);
+        }
+        filterAndSort();
+        initFileSystem();
+    }
+    boot();
 </script>
 </body>
 </html>

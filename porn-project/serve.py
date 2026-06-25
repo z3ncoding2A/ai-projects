@@ -20,6 +20,16 @@ PORT = 8888
 DIRECTORY = os.path.dirname(os.path.abspath(__file__))
 FILE = "z3ncoding_videos_grid.html"
 
+# Data files that can be read/written via API
+DATA_FILES = {
+    "categories": {"path": "categories.json", "type": "json", "default": {}},
+    "blacklist": {"path": "blacklist.txt", "type": "text", "default": []},
+    "videos": {"path": "manual_videos.json", "type": "json", "default": []},
+    "playlists": {"path": "playlists.json", "type": "json", "default": {}},
+    "tags": {"path": "tags.json", "type": "json", "default": {}},
+    "history": {"path": "history.json", "type": "json", "default": []},
+}
+
 os.chdir(DIRECTORY)
 
 
@@ -102,8 +112,54 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self._json_response(500, {"error": str(e)})
             return
 
-        # ── everything else → serve static files ────────────────────────────
+        # ── /api/<resource> → read data files ────────────────────────────────
+        if self.path.startswith("/api/"):
+            resource = self.path.split("/")[2].split("?")[0]
+            if resource in DATA_FILES:
+                cfg = DATA_FILES[resource]
+                try:
+                    if cfg["type"] == "json":
+                        data = self._read_json_file(cfg["path"], cfg["default"])
+                    else:
+                        raw = self._read_text_file(cfg["path"])
+                        # Return text files as JSON arrays (one entry per line)
+                        data = [line for line in raw.split("\n") if line.strip()]
+                    self._json_response(200, data)
+                except Exception as e:
+                    self._json_response(500, {"error": str(e)})
+                return
+            self._json_response(404, {"error": f"Unknown resource: {resource}"})
+            return
+
+        # ── everything else → serve static files ─────────────────────────────
         super().do_GET()
+
+    # ── POST handler for data persistence ────────────────────────────────
+    def do_POST(self):
+        if self.path.startswith("/api/"):
+            resource = self.path.split("/")[2].split("?")[0]
+            if resource not in DATA_FILES:
+                self._json_response(404, {"error": f"Unknown resource: {resource}"})
+                return
+
+            cfg = DATA_FILES[resource]
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length).decode("utf-8")
+
+            try:
+                if cfg["type"] == "json":
+                    data = json.loads(body)
+                    self._write_json_file(cfg["path"], data)
+                else:
+                    items = json.loads(body)
+                    text = "\n".join(str(item) for item in items) + "\n"
+                    self._write_text_file(cfg["path"], text)
+                self._json_response(200, {"ok": True})
+            except Exception as e:
+                self._json_response(500, {"error": str(e)})
+            return
+
+        self._json_response(404, {"error": "Not found"})
 
     def _json_response(self, code, data):
         body = json.dumps(data).encode()
@@ -112,6 +168,26 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def _read_json_file(self, path, default=None):
+        if not os.path.exists(path):
+            return default if default is not None else {}
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+
+    def _read_text_file(self, path):
+        if not os.path.exists(path):
+            return ""
+        with open(path, "r", encoding="utf-8") as f:
+            return f.read()
+
+    def _write_json_file(self, path, data):
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+
+    def _write_text_file(self, path, text):
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
 
     def _get_streams(self, url):
         """

@@ -42,7 +42,7 @@ player = "aplay"              # "aplay" | "pw-play"
 
 [ui]
 enabled = true
-window_class = "voice_assistant"  # must match the hyprland.conf windowrulev2
+window_class = "voice_assistant"  # must match the hyprland windowrule class:^(...)$
 width = 500
 height = 300
 
