@@ -28,6 +28,8 @@
             --cat-avg:     #3b82f6;
             --cat-most:    #f59e0b;
             --cat-explode: #ec4899;
+            --cat-related:     #06b6d4;
+            --cat-recommended: #f97316;
 
             --topbar-h: 64px;
             --list-w: 45%;
@@ -112,6 +114,10 @@
         .tab-btn.tab-avg.active { background: var(--cat-avg); border-color: var(--cat-avg); color: #fff; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4); }
         .tab-btn.tab-least { color: var(--cat-least); }
         .tab-btn.tab-least.active { background: var(--cat-least); border-color: var(--cat-least); color: #fff; box-shadow: 0 4px 12px rgba(100, 116, 139, 0.4); }
+        .tab-btn.tab-related { color: var(--cat-related); }
+        .tab-btn.tab-related.active { background: var(--cat-related); border-color: var(--cat-related); color: #fff; box-shadow: 0 4px 12px rgba(6, 182, 212, 0.4); }
+        .tab-btn.tab-recommended { color: var(--cat-recommended); }
+        .tab-btn.tab-recommended.active { background: var(--cat-recommended); border-color: var(--cat-recommended); color: #fff; box-shadow: 0 4px 12px rgba(249, 115, 22, 0.4); }
 
         .topbar-spacer { flex: 1; }
 
@@ -389,6 +395,8 @@
         .btn-avg     { background: var(--cat-avg); }
         .btn-most    { background: var(--cat-most); }
         .btn-explode { background: var(--cat-explode); }
+        .btn-related   { background: var(--cat-related); }
+        .btn-recommended { background: var(--cat-recommended); }
         .btn-reset   { background: #444; }
         .btn-delete  { background: #c0392b; }
 
@@ -823,6 +831,8 @@
 <!-- TOP BAR -->
 <header class="top-bar">
     <div class="brand">z3ncoding <span>Library</span></div>
+    <button class="tab-btn tab-related"      id="tab-related"      onclick="setTab('related')">Related</button>
+    <button class="tab-btn tab-recommended"  id="tab-recommended"  onclick="setTab('recommended')">Recommended</button>
     <button class="tab-btn active"           id="tab-none"    onclick="setTab('none')">Main Collection</button>
     <button class="tab-btn tab-public"       id="tab-public"  onclick="setTab('public')">Public</button>
     <button class="tab-btn tab-pending"      id="tab-pending" onclick="setTab('pending')">Pending</button>
@@ -981,6 +991,8 @@
         <select id="bulk-action-cat">
             <option value="">Categorize as...</option>
             <option value="none">None</option>
+            <option value="related">Related</option>
+            <option value="recommended">Recommended</option>
             <option value="public">Public</option>
             <option value="pending">Pending</option>
             <option value="least">Least</option>
@@ -1076,7 +1088,7 @@
 
     // ── Helpers ──
     function getCategoryColor(cat) {
-        const map = { public:'var(--cat-public)', pending:'var(--cat-pending)', least:'var(--cat-least)', average:'var(--cat-avg)', most:'var(--cat-most)', explode:'var(--cat-explode)' };
+        const map = { related:'var(--cat-related)', recommended:'var(--cat-recommended)', public:'var(--cat-public)', pending:'var(--cat-pending)', least:'var(--cat-least)', average:'var(--cat-avg)', most:'var(--cat-most)', explode:'var(--cat-explode)' };
         return map[cat] || 'transparent';
     }
 
@@ -1167,7 +1179,7 @@
         filteredVideos = ALL_VIDEOS.filter(vid => {
             const cat       = getVideoCategory(vid);
             const isDeleted = deleted.has(vid[8]);
-            const matchTab  = (currentTab === 'none') ? !['public','pending','least','average','most','explode'].includes(cat)
+            const matchTab  = (currentTab === 'none') ? !['related','recommended','public','pending','least','average','most','explode'].includes(cat)
                                                        : cat === currentTab;
             const matchQ    = query === '' || vid[10].includes(query);
             

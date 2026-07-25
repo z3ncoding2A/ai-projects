@@ -378,7 +378,7 @@ const useVideoStore = create((set, get) => ({
   getCategoryCounts: () => {
     const { videos, categories, blacklist } = get();
     const blacklistSet = new Set(blacklist);
-    const counts = { none: 0, public: 0, pending: 0, least: 0, average: 0, most: 0, explode: 0 };
+    const counts = { none: 0, public: 0, pending: 0, least: 0, average: 0, most: 0, explode: 0, related: 0, recommended: 0 };
     for (const vid of videos) {
       if (blacklistSet.has(vid.viewkey)) continue;
       const cat = getVideoCategory(vid, categories);

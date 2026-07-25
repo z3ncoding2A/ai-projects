@@ -299,32 +299,120 @@ def get_videos_from_search(query, page_num):
         print(f"Error searching for '{query}' on page {page_num}: {e}")
         return []
 
-def get_related_videos(viewkey):
+def scrape_video_page_sections(viewkey):
+    """Visits a video page and scrapes both Related and Recommended video sections.
+    Returns (related_videos, recommended_videos) as two separate lists."""
     url = f"{BASE_URL}/view_video.php?viewkey={viewkey}"
-    print(f"Scraping related videos for {viewkey}...")
+    print(f"  Scraping Related & Recommended for {viewkey}...")
     
     try:
         response = requests.get(url, headers=HEADERS, timeout=15)
         response.raise_for_status()
         
         soup = BeautifulSoup(response.content, 'html.parser')
-        # Related videos are often in #relatedVideosCenter or similar videoblocks
-        video_items = soup.select('ul#relatedVideosCenter li.videoblock, ul#relatedVideosCenter li.videoBox, .related-videos-container li.videoblock')
         
-        if not video_items:
-            # Fallback to any videoblocks if specific related container not found
-            video_items = soup.select('li.videoblock, li.videoBox')
-
-        extracted_videos = []
-        with ThreadPoolExecutor(max_workers=10) as executor:
-            results = list(executor.map(process_video_item, video_items))
-            # For related videos, we might want to skip the current video
-            extracted_videos = [v for v in results if v is not None and viewkey not in v['url']]
-            
-        return extracted_videos
+        # ── Related Videos ──
+        # The "Related" tab is the default active tab, its content is in the initial HTML.
+        # Try specific containers first, then broader selectors.
+        related_items = soup.select('ul#relatedVideosListing li.videoblock, ul#relatedVideosCenter li.videoblock, ul#relatedVideosCenter li.videoBox')
+        if not related_items:
+            related_items = soup.select('.related-videos-container li.videoblock, .related-videos-container li.videoBox')
+        
+        # ── Recommended Videos ──
+        # The "Recommended" tab content may be pre-loaded but hidden, or loaded via AJAX.
+        # Try known Pornhub container IDs/classes.
+        recommended_items = soup.select('ul#recommendedVideosListing li.videoblock, ul#recommendedVideosVPage li.videoblock, ul#recommendedVideosVPage li.videoBox')
+        if not recommended_items:
+            recommended_items = soup.select('#recommendedVideos li.videoblock, #recommendedVideos li.videoBox')
+        if not recommended_items:
+            # Try broader selector for any section with "recommended" in its attributes
+            rec_container = soup.find(id=re.compile(r'recommend', re.I))
+            if rec_container:
+                recommended_items = rec_container.select('li.videoblock, li.videoBox')
+        
+        # Process Related items
+        related = []
+        if related_items:
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                results = list(executor.map(process_video_item, related_items))
+                related = [v for v in results if v is not None and viewkey not in v.get('url', '')]
+            print(f"    Found {len(related)} related videos")
+        else:
+            print(f"    No related videos found in HTML")
+        
+        # Process Recommended items
+        recommended = []
+        if recommended_items:
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                results = list(executor.map(process_video_item, recommended_items))
+                recommended = [v for v in results if v is not None and viewkey not in v.get('url', '')]
+            print(f"    Found {len(recommended)} recommended videos")
+        else:
+            print(f"    No recommended videos found in HTML (may require auth/AJAX)")
+        
+        return related, recommended
     except Exception as e:
-        print(f"Error scraping related for {viewkey}: {e}")
-        return []
+        print(f"  Error scraping video page for {viewkey}: {e}")
+        return [], []
+
+
+def scrape_related_and_recommended(saved_categories, all_videos, seen_viewkeys):
+    """For every video categorized as 'most', visit its page and scrape
+    Related and Recommended sections. Returns (new_related, new_recommended) lists
+    and updates saved_categories in-place."""
+    
+    # Find all viewkeys currently categorized as "most"
+    most_viewkeys = [vk for vk, cat in saved_categories.items() if cat == 'most']
+    
+    if not most_viewkeys:
+        print("\nNo videos in 'MOST LIKED' category. Skipping Related/Recommended scraping.")
+        return [], []
+    
+    print(f"\n{'='*60}")
+    print(f"SCRAPING RELATED & RECOMMENDED FROM {len(most_viewkeys)} 'MOST LIKED' VIDEOS")
+    print(f"{'='*60}")
+    
+    new_related = []
+    new_recommended = []
+    total_related_found = 0
+    total_recommended_found = 0
+    
+    for i, vk in enumerate(most_viewkeys, 1):
+        print(f"\n[{i}/{len(most_viewkeys)}] Processing viewkey: {vk}")
+        
+        related, recommended = scrape_video_page_sections(vk)
+        
+        # Add Related videos (deduplicate against everything seen so far)
+        for vid in related:
+            total_related_found += 1
+            if vid['viewkey'] not in seen_viewkeys:
+                seen_viewkeys.add(vid['viewkey'])
+                new_related.append(vid)
+                # Only set category if not already categorized
+                if vid['viewkey'] not in saved_categories:
+                    saved_categories[vid['viewkey']] = 'related'
+        
+        # Add Recommended videos (deduplicate against everything seen so far)
+        for vid in recommended:
+            total_recommended_found += 1
+            if vid['viewkey'] not in seen_viewkeys:
+                seen_viewkeys.add(vid['viewkey'])
+                new_recommended.append(vid)
+                # Only set category if not already categorized
+                if vid['viewkey'] not in saved_categories:
+                    saved_categories[vid['viewkey']] = 'recommended'
+        
+        # Rate limit to avoid being blocked
+        if i < len(most_viewkeys):
+            time.sleep(2)
+    
+    print(f"\n{'='*60}")
+    print(f"RELATED/RECOMMENDED SCRAPING COMPLETE")
+    print(f"  Related:     {total_related_found} total found, {len(new_related)} new unique")
+    print(f"  Recommended: {total_recommended_found} total found, {len(new_recommended)} new unique")
+    print(f"{'='*60}")
+    
+    return new_related, new_recommended
 
 def write_html_grid(all_videos, filename, saved_categories):
     print(f"Generating optimized HTML grid: {filename}...")
@@ -373,6 +461,28 @@ def write_html_grid(all_videos, filename, saved_categories):
 
     with open(filename, "w", encoding="UTF-8") as f:
         f.write(html_content)
+
+    # Also save the videos to videos.json for the modern React UI (as objects, not arrays)
+    react_videos = []
+    for item in json_videos:
+        react_videos.append({
+            "idx": item[0],
+            "title": item[1],
+            "url": item[2],
+            "thumbnail": item[3],
+            "duration": item[4],
+            "rawDuration": item[5],
+            "views": item[6],
+            "rawViews": item[7],
+            "viewkey": item[8],
+            "category": item[9],
+            "searchText": item[10],
+            "remoteThumbnail": item[11]
+        })
+
+    videos_json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "videos.json")
+    with open(videos_json_path, "w", encoding="UTF-8") as f:
+        json.dump(react_videos, f, indent=2, ensure_ascii=False)
 
 def main():
     # Load categories
@@ -447,11 +557,27 @@ def main():
         print("No videos found. Check the profile URL or network connection.")
         return
 
+    # ── Scrape Related & Recommended from all MOST LIKED videos ──
+    new_related, new_recommended = scrape_related_and_recommended(
+        saved_categories, all_videos, seen_viewkeys
+    )
+    all_videos.extend(new_related)
+    all_videos.extend(new_recommended)
+    
+    # Save updated categories back to file
+    if new_related or new_recommended:
+        print(f"\nSaving updated categories.json with {len(new_related)} related + {len(new_recommended)} recommended...")
+        with open(CATEGORIES_FILE, "w") as f:
+            json.dump(saved_categories, f, indent=2)
+
     output_file = "z3ncoding_videos_grid.html"
     write_html_grid(all_videos, output_file, saved_categories)
     
     print(f"\nSUCCESS! Generated {output_file}")
     print(f"Total unique videos processed: {len(all_videos)}")
+    print(f"  - Profile videos: {len(all_videos) - len(new_related) - len(new_recommended)}")
+    print(f"  - Related:        {len(new_related)}")
+    print(f"  - Recommended:    {len(new_recommended)}")
 
 if __name__ == "__main__":
     main()

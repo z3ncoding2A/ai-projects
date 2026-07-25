@@ -10,6 +10,8 @@ export const CATEGORY_COLORS = {
   average: 'var(--cat-avg)',
   most:    'var(--cat-most)',
   explode: 'var(--cat-explode)',
+  related: 'var(--cat-related)',
+  recommended: 'var(--cat-recommended)',
 };
 
 /** Map of category key → display label */
@@ -21,6 +23,8 @@ export const CATEGORY_LABELS = {
   average: 'Average',
   most:    'Most Liked',
   explode: 'EXPLODE!!!',
+  related: 'Related',
+  recommended: 'Recommended',
 };
 
 /** Quick-action button config */
@@ -31,9 +35,11 @@ export const CATEGORY_BUTTONS = [
   { key: 'average', label: 'AVG',  cls: 'avg' },
   { key: 'most',    label: 'MAX',  cls: 'max' },
   { key: 'explode', label: '💥',   cls: 'exp' },
+  { key: 'related', label: 'REL',  cls: 'rel' },
+  { key: 'recommended', label: 'REC', cls: 'rec' },
 ];
 
-export const ASSIGNED_CATEGORIES = ['public', 'pending', 'least', 'average', 'most', 'explode'];
+export const ASSIGNED_CATEGORIES = ['public', 'pending', 'least', 'average', 'most', 'explode', 'related', 'recommended'];
 
 /** Decode HTML entities from scraped titles */
 export function decodeHTML(str) {

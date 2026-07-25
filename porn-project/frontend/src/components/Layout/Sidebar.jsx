@@ -3,6 +3,8 @@ import useVideoStore from '../../stores/useVideoStore';
 import { CATEGORY_COLORS, CATEGORY_LABELS } from '../../utils/formatters';
 
 const NAV_ITEMS = [
+  { key: 'related', icon: '🔗', label: 'Related',      color: CATEGORY_COLORS.related },
+  { key: 'recommended', icon: '⭐', label: 'Recommended', color: CATEGORY_COLORS.recommended },
   { key: 'none',    icon: '📚', label: 'Main Collection' },
   { key: 'public',  icon: '🌍', label: 'Public',       color: CATEGORY_COLORS.public },
   { key: 'pending', icon: '⏳', label: 'Pending',      color: CATEGORY_COLORS.pending },

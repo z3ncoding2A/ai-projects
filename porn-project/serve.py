@@ -264,7 +264,9 @@ socketserver.ThreadingTCPServer.allow_reuse_address = True
 # Check for --no-browser flag
 NO_BROWSER = "--no-browser" in sys.argv
 
-with socketserver.ThreadingTCPServer(("", PORT), Handler) as httpd:
+BIND_HOST = os.environ.get("BIND_HOST", "0.0.0.0")  # Bind to all network interfaces
+
+with socketserver.ThreadingTCPServer((BIND_HOST, PORT), Handler) as httpd:
     url = f"http://localhost:{PORT}/{FILE}?v={int(time.time())}"
     print(f"Serving at http://localhost:{PORT}")
     if not NO_BROWSER:

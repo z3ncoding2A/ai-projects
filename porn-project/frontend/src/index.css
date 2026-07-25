@@ -28,6 +28,8 @@
   --cat-avg:        #3b82f6;
   --cat-most:       #f59e0b;
   --cat-explode:    #ff2d78;
+  --cat-related:    #06b6d4;
+  --cat-recommended: #f97316;
 
   /* Text hierarchy */
   --text-primary:   #f0f2f5;
