@@ -24,6 +24,7 @@ FILE = "z3ncoding_videos_grid.html"
 # Data files that can be read/written via API
 DATA_FILES = {
     "categories": {"path": "categories.json", "type": "json", "default": {}},
+    "categoriesSchema": {"path": "categories-schema.json", "type": "json", "default": []},
     "blacklist": {"path": "blacklist.txt", "type": "text", "default": []},
     "videos": {"path": "videos.json", "type": "json", "default": []},
     "playlists": {"path": "playlists.json", "type": "json", "default": {}},
@@ -264,7 +265,9 @@ socketserver.ThreadingTCPServer.allow_reuse_address = True
 # Check for --no-browser flag
 NO_BROWSER = "--no-browser" in sys.argv
 
-with socketserver.ThreadingTCPServer(("", PORT), Handler) as httpd:
+BIND_HOST = os.environ.get("BIND_HOST", "100.116.128.90")  # Tailscale IP only; not LAN-exposed
+
+with socketserver.ThreadingTCPServer((BIND_HOST, PORT), Handler) as httpd:
     url = f"http://localhost:{PORT}/{FILE}?v={int(time.time())}"
     print(f"Serving at http://localhost:{PORT}")
     if not NO_BROWSER:

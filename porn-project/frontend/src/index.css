@@ -28,6 +28,8 @@
   --cat-avg:        #3b82f6;
   --cat-most:       #f59e0b;
   --cat-explode:    #ff2d78;
+  --cat-related:    #06b6d4;
+  --cat-recommended: #f97316;
 
   /* Text hierarchy */
   --text-primary:   #f0f2f5;
@@ -761,14 +763,78 @@ body {
   transform: scale(0.93);
 }
 
-.cat-btn.pub  { background: var(--cat-public); }
-.cat-btn.pend { background: var(--cat-pending); }
-.cat-btn.min  { background: var(--cat-least); }
-.cat-btn.avg  { background: var(--cat-avg); }
-.cat-btn.max  { background: var(--cat-most); }
-.cat-btn.exp  { background: var(--cat-explode); }
-.cat-btn.rst  { background: #444; }
+.cat-btn.categorize { background: var(--bg-elevated); font-size: 0.68rem; padding: 4px 8px; }
 .cat-btn.del  { background: #c0392b; }
+
+/* ── Category Tree (Sidebar + Picker) ────────────────────────────────── */
+.cat-tree-root {
+  min-height: 4px; /* keeps the empty-tree drop zone hittable */
+}
+
+.cat-tree-row {
+  gap: 6px;
+}
+
+.cat-tree-row.drop-target {
+  background: var(--accent-subtle);
+  outline: 1px dashed var(--accent);
+  outline-offset: -1px;
+}
+
+.cat-tree-caret {
+  width: 14px;
+  flex-shrink: 0;
+  text-align: center;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.cat-tree-caret-spacer {
+  cursor: default;
+}
+
+.cat-tree-icon {
+  font-size: 0.95rem;
+  width: auto;
+}
+
+.cat-tree-actions {
+  display: none;
+  align-items: center;
+  gap: 2px;
+  margin-left: 4px;
+  flex-shrink: 0;
+}
+
+.sidebar-item:hover .cat-tree-actions {
+  display: flex;
+}
+
+.cat-tree-action-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--duration-fast);
+}
+
+.cat-tree-action-btn:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.cat-tree-action-btn.danger:hover {
+  background: #c0392b;
+  color: #fff;
+}
 
 /* ── Player Panel ─────────────────────────────────────────────────────── */
 .player-area {

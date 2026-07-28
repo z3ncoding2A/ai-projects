@@ -1,16 +1,8 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import useVideoStore from '../../stores/useVideoStore';
-import { CATEGORY_COLORS, CATEGORY_LABELS } from '../../utils/formatters';
-
-const NAV_ITEMS = [
-  { key: 'none',    icon: '📚', label: 'Main Collection' },
-  { key: 'public',  icon: '🌍', label: 'Public',       color: CATEGORY_COLORS.public },
-  { key: 'pending', icon: '⏳', label: 'Pending',      color: CATEGORY_COLORS.pending },
-  { key: 'least',   icon: '👎', label: 'Least Liked',  color: CATEGORY_COLORS.least },
-  { key: 'average', icon: '👍', label: 'Average',      color: CATEGORY_COLORS.average },
-  { key: 'most',    icon: '🔥', label: 'Most Liked',   color: CATEGORY_COLORS.most },
-  { key: 'explode', icon: '💥', label: 'EXPLODE!!!',   color: CATEGORY_COLORS.explode },
-];
+import CategoryTreeList from '../Features/CategoryTreeList';
+import CategoryFormModal from '../Features/CategoryFormModal';
+import CategoryDeleteConfirm from '../Features/CategoryDeleteConfirm';
 
 export default function Sidebar() {
   const activeTab = useVideoStore((s) => s.activeTab);
@@ -19,8 +11,51 @@ export default function Sidebar() {
   const toggleSidebar = useVideoStore((s) => s.toggleSidebar);
   const playlists = useVideoStore((s) => s.playlists);
   const getCategoryCounts = useVideoStore((s) => s.getCategoryCounts);
+  const categoryTree = useVideoStore((s) => s.categoryTree);
+  const categories = useVideoStore((s) => s.categories);
+  const blacklist = useVideoStore((s) => s.blacklist);
+  const moveCategory = useVideoStore((s) => s.moveCategory);
 
-  const counts = useMemo(() => getCategoryCounts(), [getCategoryCounts]);
+  const counts = useMemo(() => getCategoryCounts(), [categoryTree, categories, blacklist]);
+
+  const [collapsedIds, setCollapsedIds] = useState(() => new Set());
+  const [formModal, setFormModal] = useState(null);   // { mode: 'create'|'rename', parentId?, node? }
+  const [deleteTarget, setDeleteTarget] = useState(null); // node
+
+  const toggleExpand = (id) => {
+    setCollapsedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const renderActions = (node) => (
+    <>
+      <button
+        className="cat-tree-action-btn"
+        title="Add subcategory"
+        onClick={(e) => { e.stopPropagation(); setFormModal({ mode: 'create', parentId: node.id }); }}
+      >
+        +
+      </button>
+      <button
+        className="cat-tree-action-btn"
+        title="Rename"
+        onClick={(e) => { e.stopPropagation(); setFormModal({ mode: 'rename', node }); }}
+      >
+        ✎
+      </button>
+      <button
+        className="cat-tree-action-btn danger"
+        title="Delete"
+        onClick={(e) => { e.stopPropagation(); setDeleteTarget(node); }}
+      >
+        🗑
+      </button>
+    </>
+  );
 
   return (
     <aside className={`sidebar${collapsed ? ' collapsed' : ''}`}>
@@ -43,28 +78,48 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <nav className="sidebar-nav">
-        {!collapsed && <div className="sidebar-section-title">Categories</div>}
-
-        {NAV_ITEMS.map((item) => (
-          <div
-            key={item.key}
-            className={`sidebar-item${activeTab === item.key ? ' active' : ''}`}
-            onClick={() => setTab(item.key)}
-            title={collapsed ? item.label : undefined}
-          >
-            {item.color ? (
-              <div className="sidebar-item-dot" style={{ background: item.color }} />
-            ) : (
-              <span className="sidebar-item-icon">{item.icon}</span>
-            )}
-            {!collapsed && (
-              <>
-                <span className="sidebar-item-label">{item.label}</span>
-                <span className="sidebar-item-count">{counts[item.key] || 0}</span>
-              </>
-            )}
+        {!collapsed && (
+          <div className="sidebar-section-title" style={{ display: 'flex', alignItems: 'center' }}>
+            <span>Categories</span>
+            <button
+              className="cat-tree-action-btn"
+              style={{ marginLeft: 'auto' }}
+              title="New top-level category"
+              onClick={() => setFormModal({ mode: 'create', parentId: null })}
+            >
+              +
+            </button>
           </div>
-        ))}
+        )}
+
+        {/* Main Collection ("Uncategorized") — pinned above the tree */}
+        <div
+          className={`sidebar-item${activeTab === 'none' ? ' active' : ''}`}
+          onClick={() => setTab('none')}
+          title={collapsed ? 'Main Collection' : undefined}
+        >
+          <span className="sidebar-item-icon">📚</span>
+          {!collapsed && (
+            <>
+              <span className="sidebar-item-label">Main Collection</span>
+              <span className="sidebar-item-count">{counts.none || 0}</span>
+            </>
+          )}
+        </div>
+
+        {!collapsed && (
+          <CategoryTreeList
+            tree={categoryTree}
+            counts={counts}
+            activeId={activeTab}
+            onSelect={(node) => setTab(node.id)}
+            collapsedIds={collapsedIds}
+            onToggleExpand={toggleExpand}
+            renderActions={renderActions}
+            draggable
+            onReparent={moveCategory}
+          />
+        )}
 
         {/* Playlists section */}
         {Object.keys(playlists).length > 0 && !collapsed && (
@@ -100,6 +155,18 @@ export default function Sidebar() {
             <span className="sidebar-item-label">Stats</span>
           </div>
         </div>
+      )}
+
+      {formModal && (
+        <CategoryFormModal
+          mode={formModal.mode}
+          parentId={formModal.parentId ?? null}
+          node={formModal.node}
+          onClose={() => setFormModal(null)}
+        />
+      )}
+      {deleteTarget && (
+        <CategoryDeleteConfirm node={deleteTarget} onClose={() => setDeleteTarget(null)} />
       )}
     </aside>
   );

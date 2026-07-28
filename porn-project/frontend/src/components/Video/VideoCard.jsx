@@ -1,7 +1,7 @@
 import { useRef, useCallback, memo } from 'react';
 import { motion } from 'framer-motion';
 import useVideoStore from '../../stores/useVideoStore';
-import { CATEGORY_COLORS, CATEGORY_BUTTONS, getVideoCategory } from '../../utils/formatters';
+import { getVideoCategory } from '../../utils/formatters';
 
 const VideoCard = memo(function VideoCard({ video, isActive, isFocused }) {
   const categories = useVideoStore((s) => s.categories);
@@ -9,7 +9,8 @@ const VideoCard = memo(function VideoCard({ video, isActive, isFocused }) {
   const isBulkMode = useVideoStore((s) => s.isBulkMode);
   const selectedVideos = useVideoStore((s) => s.selectedVideos);
   const playVideo = useVideoStore((s) => s.playVideo);
-  const setCategory = useVideoStore((s) => s.setCategory);
+  const getCategoryColor = useVideoStore((s) => s.getCategoryColor);
+  const openPicker = useVideoStore((s) => s.openPicker);
   const deleteVideo = useVideoStore((s) => s.deleteVideo);
   const addToQueue = useVideoStore((s) => s.addToQueue);
   const toggleSelection = useVideoStore((s) => s.toggleSelection);
@@ -18,7 +19,7 @@ const VideoCard = memo(function VideoCard({ video, isActive, isFocused }) {
   const intervalRef = useRef(null);
 
   const cat = getVideoCategory(video, categories);
-  const catColor = CATEGORY_COLORS[cat] || 'transparent';
+  const catColor = getCategoryColor(cat);
   const isSelected = selectedVideos.has(video.viewkey);
   const watched = watchHistory[video.viewkey];
 
@@ -176,16 +177,13 @@ const VideoCard = memo(function VideoCard({ video, isActive, isFocused }) {
       {/* Category quick-actions */}
       {!isBulkMode && (
         <div className="card-actions" onClick={(e) => e.stopPropagation()}>
-          {CATEGORY_BUTTONS.map((btn) => (
-            <button
-              key={btn.key}
-              className={`cat-btn ${btn.cls}`}
-              onClick={() => setCategory(video.viewkey, btn.key)}
-            >
-              {btn.label}
-            </button>
-          ))}
-          <button className="cat-btn rst" onClick={() => setCategory(video.viewkey, 'none')}>↺</button>
+          <button
+            className="cat-btn categorize"
+            onClick={() => openPicker({ mode: 'single', viewkey: video.viewkey })}
+            title="Categorize"
+          >
+            🏷 Categorize
+          </button>
           <button className="cat-btn del" onClick={() => {
             if (window.confirm('Move to blacklist?')) deleteVideo(video.viewkey);
           }}>✕</button>

@@ -10,6 +10,7 @@ import PlayerPanel from './components/Player/PlayerPanel';
 import QueueWidget from './components/Queue/QueueWidget';
 import StatsPanel from './components/Features/StatsPanel';
 import AdvancedSearchModal from './components/Features/AdvancedSearchModal';
+import CategoryPickerModal from './components/Features/CategoryPickerModal';
 
 export default function App() {
   const init = useVideoStore((s) => s.init);
@@ -150,6 +151,7 @@ export default function App() {
       {/* Modals */}
       {showStats && <StatsPanel onClose={() => setShowStats(false)} />}
       {showAdvancedSearch && <AdvancedSearchModal onClose={() => setShowAdvancedSearch(false)} />}
+      <CategoryPickerModal />
     </div>
   );
 }

@@ -40,6 +40,10 @@ export async function fetchCategories() {
   return fetchJSON(`${API_BASE}/categories`);
 }
 
+export async function fetchCategorySchema() {
+  return fetchJSON(`${API_BASE}/categoriesSchema`);
+}
+
 export async function fetchBlacklist() {
   return fetchJSON(`${API_BASE}/blacklist`);
 }
@@ -67,6 +71,13 @@ export async function saveCategories(data) {
     method: 'POST',
     body: JSON.stringify(data),
   }, 'Categories saved');
+}
+
+export async function saveCategorySchema(data) {
+  return fetchJSONWithToast(`${API_BASE}/categoriesSchema`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }, 'Categories updated');
 }
 
 export async function saveBlacklist(data) {

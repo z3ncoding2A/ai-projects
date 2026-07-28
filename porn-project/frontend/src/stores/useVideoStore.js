@@ -1,6 +1,13 @@
 import { create } from 'zustand';
+import toast from 'react-hot-toast';
 import * as api from '../utils/api';
-import { getVideoCategory, ASSIGNED_CATEGORIES } from '../utils/formatters';
+import {
+  getVideoCategory,
+  buildCategoryIndex,
+  getDescendantIds,
+  generateId,
+  SEED_CATEGORIES,
+} from '../utils/formatters';
 
 /** Debounce helper */
 function debounce(fn, ms) {
@@ -13,6 +20,7 @@ function debounce(fn, ms) {
 
 // Debounced save functions — persist to disk via API
 const debouncedSaveCategories = debounce((data) => api.saveCategories(data).catch(console.error), 400);
+const debouncedSaveCategorySchema = debounce((data) => api.saveCategorySchema(data).catch(console.error), 400);
 const debouncedSaveBlacklist = debounce((data) => api.saveBlacklist(data).catch(console.error), 400);
 const debouncedSavePlaylists = debounce((data) => api.savePlaylists(data).catch(console.error), 400);
 const debouncedSaveTags = debounce((data) => api.saveTags(data).catch(console.error), 400);
@@ -22,6 +30,7 @@ const useVideoStore = create((set, get) => ({
   // ── Data ──────────────────────────────────────────────────────────
   videos: [],
   categories: {},
+  categoryTree: [],          // flat array of { id, name, color, icon, parentId, sortOrder }
   blacklist: [],
   playlists: {},
   tags: {},
@@ -30,6 +39,7 @@ const useVideoStore = create((set, get) => ({
   error: null,
 
   // ── UI State ──────────────────────────────────────────────────────
+  pickerTarget: null,        // { mode: 'single', viewkey } | { mode: 'bulk' } | null
   activeTab: 'none',
   searchQuery: '',
   advancedSearch: {
@@ -59,17 +69,28 @@ const useVideoStore = create((set, get) => ({
   init: async () => {
     set({ isLoading: true, error: null });
     try {
-      const [videos, categories, blacklist, playlists, tags, history] = await Promise.all([
+      const [videos, categories, categoryTree, blacklist, playlists, tags, history] = await Promise.all([
         api.fetchVideos(),
         api.fetchCategories(),
+        api.fetchCategorySchema().catch(() => []),
         api.fetchBlacklist(),
         api.fetchPlaylists().catch(() => ({})),
         api.fetchTags().catch(() => ({})),
         api.fetchHistory().catch(() => ({})),
       ]);
+
+      // Auto-seed the tree on first load so categories-schema.json gets created
+      // with the 8 legacy category ids/colors as top-level nodes.
+      let tree = categoryTree;
+      if (!tree || tree.length === 0) {
+        tree = SEED_CATEGORIES;
+        debouncedSaveCategorySchema(tree);
+      }
+
       set({
         videos,
         categories,
+        categoryTree: tree,
         blacklist,
         playlists,
         tags,
@@ -85,7 +106,8 @@ const useVideoStore = create((set, get) => ({
 
   // ── Filtering + Sorting ───────────────────────────────────────────
   refilter: () => {
-    const { videos, categories, blacklist, activeTab, searchQuery, advancedSearch, sortMode } = get();
+    const { videos, categories, blacklist, activeTab, searchQuery, advancedSearch, sortMode, categoryTree } = get();
+    const { byId, childrenOf } = buildCategoryIndex(categoryTree);
     const blacklistSet = new Set(blacklist);
     const query = searchQuery.toLowerCase().trim();
 
@@ -98,18 +120,21 @@ const useVideoStore = create((set, get) => ({
       }
     }
 
+    // Selecting a parent category includes all of its descendants' videos.
+    const activeSet = activeTab !== 'none' ? getDescendantIds(activeTab, childrenOf) : null;
+
     let filtered = videos.filter((vid) => {
       if (blacklistSet.has(vid.viewkey)) return false;
-      const cat = getVideoCategory(vid, categories);
-      const matchTab = activeTab === 'none'
-        ? !ASSIGNED_CATEGORIES.includes(cat)
-        : cat === activeTab;
-      
+      const rawCat = getVideoCategory(vid, categories);
+      // Dangling ids (deleted category, stale legacy value) fold into Uncategorized.
+      const cat = byId.has(rawCat) ? rawCat : 'none';
+      const matchTab = activeTab === 'none' ? cat === 'none' : activeSet.has(cat);
+
       let matchQuery = !query || vid.searchText.includes(query);
       if (matchQuery && regexObj) {
         matchQuery = regexObj.test(vid.title);
       }
-      
+
       const matchViews = !advancedSearch.minViews || vid.rawViews >= parseInt(advancedSearch.minViews, 10);
       const matchDuration = !advancedSearch.minDuration || vid.rawDuration >= (parseInt(advancedSearch.minDuration, 10) * 60);
 
@@ -374,19 +399,142 @@ const useVideoStore = create((set, get) => ({
     });
   },
 
-  // ── Category Counts (for sidebar badges) ──────────────────────────
+  // ── Category Counts (for sidebar badges, bottom-up aggregated) ─────
   getCategoryCounts: () => {
-    const { videos, categories, blacklist } = get();
+    const { videos, categories, blacklist, categoryTree } = get();
+    const { byId, childrenOf } = buildCategoryIndex(categoryTree);
     const blacklistSet = new Set(blacklist);
-    const counts = { none: 0, public: 0, pending: 0, least: 0, average: 0, most: 0, explode: 0 };
+
+    const direct = { none: 0 };
+    for (const n of categoryTree) direct[n.id] = 0;
     for (const vid of videos) {
       if (blacklistSet.has(vid.viewkey)) continue;
-      const cat = getVideoCategory(vid, categories);
-      if (ASSIGNED_CATEGORIES.includes(cat)) counts[cat]++;
-      else counts.none++;
+      const rawCat = getVideoCategory(vid, categories);
+      const cat = byId.has(rawCat) ? rawCat : 'none';
+      direct[cat] = (direct[cat] || 0) + 1;
     }
-    return counts;
+
+    // total[n] = direct[n] + sum(total[child]) — so a parent's badge includes its subtree.
+    const total = { ...direct };
+    const memo = new Set();
+    const compute = (id) => {
+      if (memo.has(id)) return total[id];
+      let sum = direct[id] || 0;
+      for (const child of childrenOf.get(id) || []) sum += compute(child.id);
+      total[id] = sum;
+      memo.add(id);
+      return sum;
+    };
+    for (const n of categoryTree) compute(n.id);
+    return total;
   },
+
+  // ── Category color lookup (tree-derived, replaces static CATEGORY_COLORS) ──
+  getCategoryColor: (id) => {
+    const node = get().categoryTree.find((n) => n.id === id);
+    return node?.color || 'transparent';
+  },
+
+  // ── Category tree CRUD ──────────────────────────────────────────────
+  createCategory: ({ name, color, icon = null, parentId = null }) => {
+    set((state) => {
+      const id = generateId();
+      const siblings = state.categoryTree.filter((n) => n.parentId === parentId);
+      const sortOrder = siblings.length;
+      const next = [...state.categoryTree, { id, name, color, icon, parentId, sortOrder }];
+      debouncedSaveCategorySchema(next);
+      return { categoryTree: next };
+    });
+  },
+
+  renameCategory: (id, name) => {
+    set((state) => {
+      const next = state.categoryTree.map((n) => (n.id === id ? { ...n, name } : n));
+      debouncedSaveCategorySchema(next);
+      return { categoryTree: next };
+    });
+  },
+
+  setCategoryColor: (id, color) => {
+    set((state) => {
+      const next = state.categoryTree.map((n) => (n.id === id ? { ...n, color } : n));
+      debouncedSaveCategorySchema(next);
+      return { categoryTree: next };
+    });
+  },
+
+  // Reparent a node. Rejects moving a node into itself or one of its own descendants.
+  moveCategory: (id, newParentId) => {
+    set((state) => {
+      const { childrenOf } = buildCategoryIndex(state.categoryTree);
+      const descendants = getDescendantIds(id, childrenOf);
+      if (newParentId === id || descendants.has(newParentId)) {
+        toast.error("Can't move a category into itself or its own subcategory");
+        return state;
+      }
+      const siblings = state.categoryTree.filter((n) => n.parentId === newParentId && n.id !== id);
+      const next = state.categoryTree.map((n) =>
+        n.id === id ? { ...n, parentId: newParentId, sortOrder: siblings.length } : n
+      );
+      debouncedSaveCategorySchema(next);
+      return { categoryTree: next };
+    });
+    get().refilter();
+  },
+
+  // Recompute sortOrder for a sibling group after a drag reorder.
+  reorderCategory: (id, parentId, newIndex) => {
+    set((state) => {
+      const moved = state.categoryTree.find((n) => n.id === id);
+      if (!moved) return state;
+      const siblings = state.categoryTree
+        .filter((n) => n.parentId === parentId && n.id !== id)
+        .sort((a, b) => a.sortOrder - b.sortOrder);
+      siblings.splice(newIndex, 0, moved);
+      const reindexed = new Map(siblings.map((n, i) => [n.id, i]));
+      const next = state.categoryTree.map((n) =>
+        reindexed.has(n.id) ? { ...n, sortOrder: reindexed.get(n.id), parentId } : n
+      );
+      debouncedSaveCategorySchema(next);
+      return { categoryTree: next };
+    });
+  },
+
+  // Splice-delete: videos + child nodes are promoted to the deleted node's parent
+  // (or unassigned/top-level if it had none). Not a cascade delete.
+  deleteCategory: (id) => {
+    set((state) => {
+      const target = state.categoryTree.find((n) => n.id === id);
+      if (!target) return state;
+      const parentId = target.parentId;
+
+      const nextTree = state.categoryTree
+        .filter((n) => n.id !== id)
+        .map((n) => (n.parentId === id ? { ...n, parentId } : n));
+
+      const nextCategories = { ...state.categories };
+      for (const [vk, cat] of Object.entries(nextCategories)) {
+        if (cat === id) {
+          if (parentId) nextCategories[vk] = parentId;
+          else delete nextCategories[vk];
+        }
+      }
+
+      debouncedSaveCategorySchema(nextTree);
+      debouncedSaveCategories(nextCategories);
+
+      return {
+        categoryTree: nextTree,
+        categories: nextCategories,
+        activeTab: state.activeTab === id ? (parentId || 'none') : state.activeTab,
+      };
+    });
+    get().refilter();
+  },
+
+  // ── Category picker modal target (VideoCard + TopBar both open this) ──
+  openPicker: (target) => set({ pickerTarget: target }),
+  closePicker: () => set({ pickerTarget: null }),
 }));
 
 export default useVideoStore;

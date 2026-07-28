@@ -11,7 +11,7 @@ export default function TopBar() {
   const isBulkMode = useVideoStore((s) => s.isBulkMode);
   const toggleBulkMode = useVideoStore((s) => s.toggleBulkMode);
   const selectedVideos = useVideoStore((s) => s.selectedVideos);
-  const bulkSetCategory = useVideoStore((s) => s.bulkSetCategory);
+  const openPicker = useVideoStore((s) => s.openPicker);
   const bulkDelete = useVideoStore((s) => s.bulkDelete);
   const selectAll = useVideoStore((s) => s.selectAll);
   const clearSelection = useVideoStore((s) => s.clearSelection);
@@ -96,11 +96,8 @@ export default function TopBar() {
 
         {isBulkMode && selectedVideos.size > 0 && (
           <>
-            <button className="topbar-btn" onClick={() => bulkSetCategory('most')}>
-              🔥 Bulk MAX
-            </button>
-            <button className="topbar-btn" onClick={() => bulkSetCategory('explode')}>
-              💥 Bulk 💥
+            <button className="topbar-btn" onClick={() => openPicker({ mode: 'bulk' })}>
+              🏷 Bulk Categorize
             </button>
             <button className="topbar-btn" onClick={bulkDelete} style={{ color: '#e74c3c' }}>
               🗑 Delete

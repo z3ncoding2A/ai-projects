@@ -1,12 +1,15 @@
 import { useMemo } from 'react';
 import useVideoStore from '../../stores/useVideoStore';
-import { getVideoCategory, CATEGORY_LABELS, CATEGORY_COLORS, formatDuration } from '../../utils/formatters';
+import { getVideoCategory, formatDuration } from '../../utils/formatters';
 
 export default function StatsPanel({ onClose }) {
   const videos = useVideoStore((s) => s.videos);
   const categories = useVideoStore((s) => s.categories);
+  const categoryTree = useVideoStore((s) => s.categoryTree);
   const blacklist = useVideoStore((s) => s.blacklist);
   const watchHistory = useVideoStore((s) => s.watchHistory);
+
+  const catById = useMemo(() => new Map(categoryTree.map((n) => [n.id, n])), [categoryTree]);
 
   const stats = useMemo(() => {
     const blacklistSet = new Set(blacklist);
@@ -82,7 +85,9 @@ export default function StatsPanel({ onClose }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
           {catEntries.map(([cat, count]) => {
             const pct = stats.activeCount > 0 ? (count / stats.activeCount) * 100 : 0;
-            const color = CATEGORY_COLORS[cat] || 'var(--text-muted)';
+            const node = catById.get(cat);
+            const color = node?.color || 'var(--text-muted)';
+            const label = cat === 'none' ? 'Uncategorized' : (node?.name || cat);
             return (
               <div key={cat} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{
@@ -90,7 +95,7 @@ export default function StatsPanel({ onClose }) {
                   background: color, flexShrink: 0,
                 }} />
                 <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', width: 100 }}>
-                  {CATEGORY_LABELS[cat] || cat}
+                  {label}
                 </span>
                 <div style={{
                   flex: 1, height: 6, background: 'var(--bg-surface)',
