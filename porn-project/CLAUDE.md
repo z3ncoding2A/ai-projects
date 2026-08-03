@@ -12,6 +12,8 @@ This project follows a 3-layer architecture (see AGENTS.md for full detail):
 
 **Before writing new code**, check if an existing script covers the task.
 
+**Self-annealing is automatic, not opt-in.** Whenever you hit a bug, an API constraint (e.g. a Pornhub scraping quirk), or a better approach than what a directive currently describes, update the relevant directive file in the same turn you fix the code — don't just patch silently and move on. This applies whether or not the user asks for it. Sequence: fix → test → update directive → mention in your summary which directive changed and why.
+
 ## Running the Project
 
 ```bash
