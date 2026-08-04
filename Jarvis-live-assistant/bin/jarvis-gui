@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Launcher for MARK XLVI (J.A.R.V.I.S.) — the Gemini Live GUI assistant.
+set -euo pipefail
+
+APP_DIR="/home/z3ncoding123/ai-projects/Jarvis-live-assistant"
+VENV_PYTHON="$APP_DIR/.venv/bin/python"
+
+cd "$APP_DIR"
+
+if [[ -x "$VENV_PYTHON" ]]; then
+  exec "$VENV_PYTHON" main.py "$@"
+else
+  exec python3 main.py "$@"
+fi

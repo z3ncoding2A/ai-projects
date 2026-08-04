@@ -15,3 +15,5 @@
 .idea/
 .vscode/
 *.sublime-workspace
+
+*/Jarvis-live-assistant/config/api_keys.json

@@ -4,12 +4,14 @@ import useKeyboardNav from './hooks/useKeyboardNav';
 import Sidebar from './components/Layout/Sidebar';
 import TopBar from './components/Layout/TopBar';
 import MiniPlayer from './components/Layout/MiniPlayer';
-import HeroBanner from './components/Video/HeroBanner';
 import VideoGrid from './components/Video/VideoGrid';
 import PlayerPanel from './components/Player/PlayerPanel';
 import QueueWidget from './components/Queue/QueueWidget';
 import StatsPanel from './components/Features/StatsPanel';
 import AdvancedSearchModal from './components/Features/AdvancedSearchModal';
+import BlacklistModal from './components/Features/BlacklistModal';
+import DuplicatesModal from './components/Features/DuplicatesModal';
+import ForceCategorizeModal from './components/Player/ForceCategorizeModal';
 
 export default function App() {
   const init = useVideoStore((s) => s.init);
@@ -20,6 +22,8 @@ export default function App() {
 
   const [showStats, setShowStats] = useState(false);
   const [showAdvancedSearch, setShowAdvancedSearch] = useState(false);
+  const [showBlacklist, setShowBlacklist] = useState(false);
+  const [showDuplicates, setShowDuplicates] = useState(false);
   const [playerWidth, setPlayerWidth] = useState(50); // percentage
   const resizerRef = useRef(null);
   const isResizing = useRef(false);
@@ -91,7 +95,6 @@ export default function App() {
         <div className="app-content">
           {/* Browse panel */}
           <div className="browse-panel">
-            <HeroBanner />
             <VideoGrid />
           </div>
 
@@ -146,10 +149,23 @@ export default function App() {
         style={{ display: 'none' }}
         onClick={() => setShowAdvancedSearch(true)}
       />
+      <button
+        id="blacklist-trigger"
+        style={{ display: 'none' }}
+        onClick={() => setShowBlacklist(true)}
+      />
+      <button
+        id="duplicates-trigger"
+        style={{ display: 'none' }}
+        onClick={() => setShowDuplicates(true)}
+      />
 
       {/* Modals */}
       {showStats && <StatsPanel onClose={() => setShowStats(false)} />}
       {showAdvancedSearch && <AdvancedSearchModal onClose={() => setShowAdvancedSearch(false)} />}
+      {showBlacklist && <BlacklistModal onClose={() => setShowBlacklist(false)} />}
+      {showDuplicates && <DuplicatesModal onClose={() => setShowDuplicates(false)} />}
+      <ForceCategorizeModal />
     </div>
   );
 }

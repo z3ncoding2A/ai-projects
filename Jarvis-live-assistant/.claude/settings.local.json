@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//usr/**)",
+      "Read(//opt/**)",
+      "Bash(ldconfig -p)",
+      "Bash(/home/z3ncoding123/ai-projects/ai-voice-assistant/.venv/bin/python -c \"import ctranslate2; print\\(ctranslate2.__version__\\)\")",
+      "Bash(sudo ln -sf /usr/local/lib/ollama/cuda_v12/libcublas.so.12 /usr/local/lib/libcublas.so.12)",
+      "Bash(sudo ln -sf /usr/local/lib/ollama/cuda_v12/libcublasLt.so.12 /usr/local/lib/libcublasLt.so.12)",
+      "Bash(sudo ldconfig)"
+    ]
+  }
+}

@@ -60,6 +60,10 @@ export async function fetchStreams(videoUrl) {
   return fetchJSON(`${API_BASE}/streams?url=${encodeURIComponent(videoUrl)}`);
 }
 
+export async function fetchFilterPresets() {
+  return fetchJSON(`${API_BASE}/filter_presets`);
+}
+
 // ── POST endpoints ─────────────────────────────────────────────────────
 
 export async function saveCategories(data) {
@@ -96,4 +100,11 @@ export async function saveHistory(data) {
     method: 'POST',
     body: JSON.stringify(data),
   });
+}
+
+export async function saveFilterPresets(data) {
+  return fetchJSONWithToast(`${API_BASE}/filter_presets`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }, 'Saved search updated');
 }

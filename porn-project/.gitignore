@@ -1,0 +1,26 @@
+.venv/
+.gemini/
+.vscode/
+.chrome_profile/
+__pycache__/
+*.pyc
+
+# Node / frontend build
+frontend/node_modules/
+frontend/dist/
+
+# Logs
+*.log
+
+# Editor / tool backup files
+*~
+*.save
+
+# Large generated / cached data (regenerate via generate_grid.py)
+thumbs/
+z3ncoding_videos_grid.html
+
+# Debris (see plans/improvements_audit.md repo hygiene section)
+temp_script.js
+test_page.html
+screenshot.png

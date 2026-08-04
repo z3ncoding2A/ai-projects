@@ -19,7 +19,13 @@ from curl_cffi import requests
 
 PORT = 8888
 DIRECTORY = os.path.dirname(os.path.abspath(__file__))
-FILE = "z3ncoding_videos_grid.html"
+FILE = "index.html"
+_FRONTEND_INDEX = os.path.join(DIRECTORY, "frontend", "dist", "index.html")
+if not os.path.exists(_FRONTEND_INDEX):
+    # The legacy z3ncoding_videos_grid.html fallback was removed (2026-08-03) —
+    # the React frontend is the only supported UI now. See plans/improvements_audit.md.
+    print(f"WARNING: {_FRONTEND_INDEX} not found.")
+    print("Run `npm install && npm run build` inside frontend/ before starting serve.py.\n")
 
 # Data files that can be read/written via API
 DATA_FILES = {
@@ -28,23 +34,71 @@ DATA_FILES = {
     "videos": {"path": "videos.json", "type": "json", "default": []},
     "playlists": {"path": "playlists.json", "type": "json", "default": {}},
     "tags": {"path": "tags.json", "type": "json", "default": {}},
-    "history": {"path": "history.json", "type": "json", "default": []},
+    # Object keyed by viewkey: {lastWatched, count, lastPosition}. Default was
+    # previously [] (a leftover from the legacy template's flat watched-list
+    # format); the React store has always expected an object.
+    "history": {"path": "history.json", "type": "json", "default": {}},
+    "first_seen": {"path": "first_seen.json", "type": "json", "default": {}},
+    # Named saved searches: name -> {searchQuery, minViews, minDuration, regex}
+    "filter_presets": {"path": "filter_presets.json", "type": "json", "default": {}},
 }
+
+# Hostname suffixes /api/proxy is allowed to fetch. The proxy exists to get around
+# CORS for HLS/video segment CDNs — without an allowlist it's an open SSRF-capable
+# proxy for anyone who can reach this server. Add suffixes here if new source sites
+# are added to the scraper.
+ALLOWED_PROXY_SUFFIXES = (
+    ".phncdn.com",
+    ".pornhub.com",
+    "pornhub.com",
+    ".xhcdn.com",
+    ".xhamster.com",
+    "xhamster.com",
+)
+
+# In-process cache for yt-dlp stream extraction, keyed by source video URL.
+# Avoids re-spawning yt-dlp (2-5s) every time the same video is replayed.
+_STREAMS_CACHE = {}
+STREAMS_CACHE_TTL = 2 * 60 * 60  # 2 hours — stream URLs are signed and expire anyway
 
 os.chdir(DIRECTORY)
 
 
+def _is_allowed_proxy_target(url):
+    try:
+        host = urllib.parse.urlparse(url).hostname or ""
+    except Exception:
+        return False
+    host = host.lower()
+    return any(host == s.lstrip(".") or host.endswith(s) for s in ALLOWED_PROXY_SUFFIXES)
+
+
 class Handler(http.server.SimpleHTTPRequestHandler):
     def end_headers(self):
-        self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
-        self.send_header("Pragma", "no-cache")
-        self.send_header("Expires", "0")
+        if self.path.startswith("/thumbs/"):
+            # Thumbnails are content-addressed by viewkey and never change once
+            # written — safe to cache aggressively. This was previously no-store,
+            # forcing a re-fetch of the entire thumbs/ dir (650MB+) on every reload.
+            self.send_header("Cache-Control", "public, max-age=31536000, immutable")
+        else:
+            # Everything else (API responses, the HTML shell, JS/CSS bundle) must
+            # stay fresh — categories/blacklist/etc. change constantly.
+            self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+            self.send_header("Pragma", "no-cache")
+            self.send_header("Expires", "0")
         # Allow the page to use the stream URLs cross-origin (needed for <video> src)
         self.send_header("Access-Control-Allow-Origin", "*")
         super().end_headers()
 
     def log_message(self, format, *args):
-        pass  # Suppress request logs for cleanliness
+        # pass  # Suppress request logs for cleanliness
+        sys.stderr.write("%s - - [%s] %s\n" %
+                         (self.address_string(),
+                          self.log_date_time_string(),
+                          format%args))
+
+    def do_HEAD(self):
+        self.do_GET()
 
     def do_GET(self):
         # ── /api/proxy?url=<url> ────────────────────────────────────────────
@@ -55,6 +109,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
             if not target_url:
                 self._json_response(400, {"error": "Missing url"})
+                return
+
+            if not _is_allowed_proxy_target(target_url):
+                self._json_response(403, {"error": "Host not in proxy allowlist"})
                 return
 
             try:
@@ -132,6 +190,37 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._json_response(404, {"error": f"Unknown resource: {resource}"})
             return
 
+        # ── Root path → serve frontend/dist/index.html if available ─────────
+        if self.path in ("/", "/index.html"):
+            frontend_index = os.path.join(DIRECTORY, "frontend", "dist", "index.html")
+            if os.path.exists(frontend_index):
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                with open(frontend_index, "rb") as f:
+                    content = f.read()
+                self.send_header("Content-Length", str(len(content)))
+                self.end_headers()
+                self.wfile.write(content)
+                return
+
+        # ── /assets/* → serve built static assets from frontend/dist/assets ──
+        if self.path.startswith("/assets/"):
+            asset_path = os.path.join(DIRECTORY, "frontend", "dist", self.path.lstrip("/"))
+            if os.path.exists(asset_path):
+                self.send_response(200)
+                if asset_path.endswith(".js"):
+                    self.send_header("Content-Type", "application/javascript")
+                elif asset_path.endswith(".css"):
+                    self.send_header("Content-Type", "text/css")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                with open(asset_path, "rb") as f:
+                    content = f.read()
+                self.send_header("Content-Length", str(len(content)))
+                self.end_headers()
+                self.wfile.write(content)
+                return
+
         # ── everything else → serve static files ─────────────────────────────
         super().do_GET()
 
@@ -194,7 +283,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         """
         Use yt-dlp to get all available video+audio format URLs.
         Returns a list of {quality, url, ext} dicts sorted best-first.
+        Cached per-URL for STREAMS_CACHE_TTL to avoid re-spawning yt-dlp on replay.
         """
+        cached = _STREAMS_CACHE.get(url)
+        if cached and (time.time() - cached[0]) < STREAMS_CACHE_TTL:
+            return cached[1]
+
+        result = self._extract_streams(url)
+        _STREAMS_CACHE[url] = (time.time(), result)
+        return result
+
+    def _extract_streams(self, url):
         cmd = [
             "yt-dlp",
             "--no-playlist",
@@ -264,7 +363,10 @@ socketserver.ThreadingTCPServer.allow_reuse_address = True
 # Check for --no-browser flag
 NO_BROWSER = "--no-browser" in sys.argv
 
-BIND_HOST = os.environ.get("BIND_HOST", "0.0.0.0")  # Bind to all network interfaces
+BIND_HOST = os.environ.get("BIND_HOST", "127.0.0.1")  # localhost-only by default.
+# /api/proxy and /api/<resource> POST are unauthenticated; binding 0.0.0.0 exposes
+# an open proxy + writable data files to anyone on the LAN. Set BIND_HOST=0.0.0.0
+# explicitly if you deliberately want LAN access.
 
 with socketserver.ThreadingTCPServer((BIND_HOST, PORT), Handler) as httpd:
     url = f"http://localhost:{PORT}/{FILE}?v={int(time.time())}"

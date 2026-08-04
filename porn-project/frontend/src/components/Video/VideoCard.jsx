@@ -159,6 +159,16 @@ const VideoCard = memo(function VideoCard({ video, isActive, isFocused }) {
           <div className="card-watched">👁 {watched.count}×</div>
         )}
 
+        {/* Resume progress bar */}
+        {watched?.lastPosition > 0 && video.rawDuration > 0 && (
+          <div className="card-progress-track" title={`Resume at ${Math.floor(watched.lastPosition / 60)}:${String(Math.floor(watched.lastPosition % 60)).padStart(2, '0')}`}>
+            <div
+              className="card-progress-fill"
+              style={{ width: `${Math.min(100, (watched.lastPosition / video.rawDuration) * 100)}%` }}
+            />
+          </div>
+        )}
+
         {/* Play overlay */}
         <div className="card-play-overlay">
           <div className="card-play-icon">▶</div>

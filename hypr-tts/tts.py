@@ -2,6 +2,7 @@
 import asyncio
 import json
 import os
+import shutil
 import subprocess
 import sys
 
@@ -51,19 +52,30 @@ def load_config():
         return DEFAULT_CONFIG
 
 def get_selected_text():
+    # 1. Try primary selection (wl-paste -p) first (highlighted text with mouse in Kitty / Wayland apps)
     try:
-        # Get primary selection (highlighted text) via wl-paste
-        result = subprocess.run(['wl-paste', '-p'], capture_output=True, text=True, check=True)
-        return result.stdout.strip()
-    except subprocess.CalledProcessError:
-        return ""
-    except FileNotFoundError:
-        print("Error: wl-paste not found. Ensure wl-clipboard is installed.")
-        sys.exit(1)
+        res = subprocess.run(['wl-paste', '-p'], capture_output=True, text=True, check=True, timeout=1)
+        text = res.stdout.strip()
+        if text:
+            return text
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
+        pass
+
+    # 2. Fallback to standard clipboard (wl-paste)
+    try:
+        res = subprocess.run(['wl-paste'], capture_output=True, text=True, check=True, timeout=1)
+        text = res.stdout.strip()
+        if text:
+            return text
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
+        pass
+
+    return ""
 
 def kill_previous():
-    # Kill any previously running hypr-tts mpv processes
+    # Kill any previously running hypr-tts mpv or ffplay processes
     subprocess.run(["pkill", "-f", "hypr-tts-mpv-player"], stderr=subprocess.DEVNULL)
+    subprocess.run(["pkill", "-f", "ffplay.*-nodisp"], stderr=subprocess.DEVNULL)
 
 def split_into_chunks(text, max_chars=1500):
     """
@@ -136,25 +148,24 @@ async def main():
         print("Error: edge-tts is not installed. Please install it.")
         sys.exit(1)
 
-    # Check if mpv is installed
-    try:
-        subprocess.run(["mpv", "--version"], capture_output=True, check=True)
-    except FileNotFoundError:
-        print("Error: mpv is not installed. Please install mpv to play the audio.")
+    # Check for available audio player (mpv, ffplay, paplay)
+    player_cmd = None
+    if shutil.which("mpv"):
+        player_cmd = ["mpv", "--no-video", "--title=hypr-tts-mpv-player", "--no-terminal", "-"]
+    elif shutil.which("ffplay"):
+        player_cmd = ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", "-"]
+    elif shutil.which("paplay"):
+        player_cmd = ["paplay"]
+    else:
+        print("Error: No supported audio player found (mpv, ffplay, paplay). Please install one.")
         sys.exit(1)
 
     # Split text into safe-sized chunks to avoid edge-tts truncation
     chunks = split_into_chunks(text, max_chars=1500)
 
-    # Open a single mpv process; stream all chunks into it sequentially
+    # Open player process; stream all chunks into it sequentially
     mpv_process = subprocess.Popen(
-        [
-            "mpv",
-            "--no-video",
-            "--title=hypr-tts-mpv-player",
-            "--no-terminal",
-            "-"
-        ],
+        player_cmd,
         stdin=subprocess.PIPE,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL

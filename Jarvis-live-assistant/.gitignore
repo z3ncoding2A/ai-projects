@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+models/
+.tmp/
+*.wav
+*.onnx
+*.onnx.json
+.env
+config/api_keys.json
