@@ -18,6 +18,7 @@ import subprocess
 import urllib.parse
 from curl_cffi import requests
 from anthropic import Anthropic
+from bs4 import BeautifulSoup
 
 PORT = 8888
 DIRECTORY = os.path.dirname(os.path.abspath(__file__))
@@ -192,6 +193,26 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         self._json_response(502, {"error": f"Proxy error: {e}"})
                     except Exception:
                         pass
+            return
+
+        # ── /api/refresh-thumbnail?viewkey=<viewkey> ────────────────────────
+        # Hover-preview thumbnails that come from Pornhub's signed CDN URLs
+        # expire ~24h after scraping. Called by the frontend when a preview
+        # image fails to load, so it can self-heal instead of staying broken.
+        if self.path.startswith("/api/refresh-thumbnail"):
+            parsed = urllib.parse.urlparse(self.path)
+            params = urllib.parse.parse_qs(parsed.query)
+            viewkey = params.get("viewkey", [""])[0]
+
+            if not viewkey:
+                self._json_response(400, {"error": "Missing viewkey"})
+                return
+
+            try:
+                result = self._refresh_thumbnail(viewkey)
+                self._json_response(200, result)
+            except Exception as e:
+                self._json_response(500, {"error": str(e)})
             return
 
         # ── /api/streams?url=<encoded_url> ──────────────────────────────────
@@ -503,6 +524,59 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             "duration": info.get("duration"),
             "streams": streams,
         }
+
+    def _scrape_page_thumbnail(self, video_url):
+        """Re-fetch the video page and read its og:image/image_src meta tags."""
+        res = requests.get(video_url, impersonate="chrome", timeout=10)
+        if res.status_code != 200:
+            return ""
+        soup = BeautifulSoup(res.content, "html.parser")
+        og = soup.find("meta", property="og:image")
+        if og and og.get("content"):
+            return og["content"]
+        link = soup.find("link", rel="image_src")
+        if link and link.get("href"):
+            return link["href"]
+        return ""
+
+    def _thumbnail_via_ytdlp(self, video_url):
+        cmd = [
+            "yt-dlp", "--no-playlist", "--dump-json", "--no-warnings",
+            "--skip-download", "--impersonate", "chrome", video_url,
+        ]
+        out = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, timeout=20)
+        return json.loads(out).get("thumbnail", "") or ""
+
+    def _refresh_thumbnail(self, viewkey):
+        """
+        Re-scrape a fresh remoteThumbnail for one video and persist it back
+        to videos.json, so a hover-preview that failed because its signed
+        CDN URL expired self-heals for next time.
+        """
+        videos = self._read_json_file(DATA_FILES["videos"]["path"], [])
+        record = next((v for v in videos if v.get("viewkey") == viewkey), None)
+        if record is None:
+            return {"error": "Unknown viewkey", "remoteThumbnail": ""}
+
+        video_url = record.get("url", "")
+        fresh = ""
+        if video_url:
+            try:
+                fresh = self._scrape_page_thumbnail(video_url)
+            except Exception:
+                fresh = ""
+            if not fresh:
+                try:
+                    fresh = self._thumbnail_via_ytdlp(video_url)
+                except Exception:
+                    fresh = ""
+
+        if fresh and fresh != record.get("remoteThumbnail"):
+            record["remoteThumbnail"] = fresh
+            self._write_json_file(DATA_FILES["videos"]["path"], videos)
+            _invalidate_payload(DATA_FILES["videos"]["path"])
+
+        return {"remoteThumbnail": fresh}
 
 
 socketserver.ThreadingTCPServer.allow_reuse_address = True

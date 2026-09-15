@@ -454,6 +454,17 @@ const useVideoStore = create((set, get) => ({
     get().refilter();
   },
 
+  // Applied after a successful /api/refresh-thumbnail call, so the freshly
+  // re-scraped preview URL is used everywhere without a full data reload.
+  setVideoThumbnail: (viewkey, remoteThumbnail) => {
+    set((state) => ({
+      videos: state.videos.map((v) => (
+        v.viewkey === viewkey ? { ...v, remoteThumbnail } : v
+      )),
+    }));
+    get().refilter();
+  },
+
   toggleBlacklist: (viewkey) => {
     const { blacklist } = get();
     if (blacklist.includes(viewkey)) {

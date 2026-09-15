@@ -64,6 +64,16 @@ export async function fetchStreams(videoUrl) {
   return fetchJSON(`${API_BASE}/streams?url=${encodeURIComponent(videoUrl)}`);
 }
 
+/**
+ * Ask the server to re-scrape a fresh remoteThumbnail for one video (its
+ * signed CDN preview URL has likely expired) and persist it to videos.json.
+ * Resolves to the fresh URL, or '' if none could be found.
+ */
+export async function refreshThumbnail(viewkey) {
+  const { remoteThumbnail } = await fetchJSON(`${API_BASE}/refresh-thumbnail?viewkey=${encodeURIComponent(viewkey)}`);
+  return remoteThumbnail || '';
+}
+
 // ── POST endpoints ─────────────────────────────────────────────────────
 
 /**

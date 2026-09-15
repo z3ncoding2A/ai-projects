@@ -790,13 +790,16 @@ body {
 
 .video-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(225px, 1fr));
+  /* Column count is fixed (COLUMN_COUNTS in VideoGrid.jsx) and set inline so
+     it can never disagree with the JS row-slicing logic — these values are
+     just the pre-hydration fallback. */
+  grid-template-columns: repeat(5, 1fr);
   gap: 14px;
   align-content: start;
 }
 
 .video-grid.compact-grid {
-  grid-template-columns: repeat(auto-fill, minmax(165px, 1fr));
+  grid-template-columns: repeat(7, 1fr);
   gap: 10px;
 }
 
@@ -872,10 +875,6 @@ body {
   object-fit: cover;
   opacity: 0;
   transition: opacity 0.2s;
-}
-
-.card-thumb:hover .preview-img {
-  opacity: 1;
 }
 
 .card-scrim {

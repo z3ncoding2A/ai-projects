@@ -1,9 +1,10 @@
-import { useRef, useCallback, memo } from 'react';
+import { useRef, useCallback, useEffect, memo } from 'react';
 import { motion } from 'framer-motion';
 import useVideoStore from '../../stores/useVideoStore';
 import { getVideoCategory } from '../../utils/formatters';
+import { refreshThumbnail } from '../../utils/api';
 
-const VideoCard = memo(function VideoCard({ video, isActive, isFocused }) {
+const VideoCard = memo(function VideoCard({ video, isActive, isFocused, rowActive }) {
   const categories = useVideoStore((s) => s.categories);
   const categoryTree = useVideoStore((s) => s.categoryTree);
   const watchHistory = useVideoStore((s) => s.watchHistory);
@@ -20,9 +21,11 @@ const VideoCard = memo(function VideoCard({ video, isActive, isFocused }) {
   const copyVideoLink = useVideoStore((s) => s.copyVideoLink);
   const addToQueue = useVideoStore((s) => s.addToQueue);
   const toggleSelection = useVideoStore((s) => s.toggleSelection);
+  const setVideoThumbnail = useVideoStore((s) => s.setVideoThumbnail);
 
   const previewRef = useRef(null);
   const intervalRef = useRef(null);
+  const refreshedRef = useRef(false);
 
   const catId = getVideoCategory(video, categories);
   const catNode = categoryTree.find((n) => n.id === catId);
@@ -79,51 +82,96 @@ const VideoCard = memo(function VideoCard({ video, isActive, isFocused }) {
     }
   }, [isBlacklistTab, video.viewkey, restoreVideo, deleteVideo]);
 
-  // Thumbnail preview frame rotation
-  const startPreview = useCallback(() => {
-    const src = video.remoteThumbnail;
-    if (!src || src === 'undefined' || src === 'null' || src === '') return;
+  // Thumbnail preview frame rotation. Pornhub serves two URL shapes in
+  // remoteThumbnail: a numbered frame sequence ("...N.jpg", cycled 1-16
+  // here) and a signed, time-limited CDN transform URL that expires ~24h
+  // after scraping and 404s/410s once stale. Either can go bad, so failure
+  // handling below is shared: a run of load errors triggers exactly one
+  // on-demand backend re-scrape (/api/refresh-thumbnail), and only gives up
+  // (hides the overlay, revealing the static thumb underneath) if that also
+  // fails.
+  const applyPreviewSrc = useCallback((src) => {
     const img = previewRef.current;
-    if (!img) return;
+    if (!img || !src) return;
+
+    clearInterval(intervalRef.current);
 
     const numMatch = src.match(/^(.+?)(\d+)(\.jpg)$/i);
+    // Cyclable frames tolerate a few missing frame numbers before giving up;
+    // the static/signed branch only ever attempts one image, so any failure
+    // there is already the end of the road.
+    const maxErrors = numMatch ? 4 : 0;
     let frame = 1;
     let errors = 0;
 
-    img.onerror = () => {
-      errors++;
-      if (errors > 4) {
-        clearInterval(intervalRef.current);
-        img.src = src;
-        img.onerror = () => { img.style.opacity = '0'; };
+    const giveUp = async () => {
+      clearInterval(intervalRef.current);
+      if (refreshedRef.current) {
+        img.style.opacity = '0';
         return;
       }
-      frame = (frame % 16) + 1;
+      refreshedRef.current = true;
+      const fresh = await refreshThumbnail(video.viewkey);
+      if (fresh) {
+        setVideoThumbnail(video.viewkey, fresh);
+        applyPreviewSrc(fresh);
+      } else {
+        img.style.opacity = '0';
+      }
     };
 
+    img.onload = () => { errors = 0; };
+    img.onerror = () => {
+      errors++;
+      if (errors > maxErrors) giveUp();
+    };
+
+    img.style.opacity = '1';
     if (numMatch) {
-      img.style.opacity = '1';
+      // Plain numbered CDN host — verified to need no Referer, so load direct
+      // to keep row-wide hover (many cards cycling at once) off the local proxy.
       img.src = `${numMatch[1]}${frame}${numMatch[3]}`;
       intervalRef.current = setInterval(() => {
         frame = (frame % 16) + 1;
         img.src = `${numMatch[1]}${frame}${numMatch[3]}`;
       }, 450);
     } else {
-      img.style.opacity = '1';
-      img.src = src;
-      img.onerror = () => { img.style.opacity = '0'; };
+      // Signed CDN transform URL — this host 403s without a Referer, which
+      // the site-wide no-referrer meta tag strips from a direct <img> load.
+      // Route through /api/proxy, which already attaches the right Referer.
+      img.src = `/api/proxy?url=${encodeURIComponent(src)}`;
     }
-  }, [video.remoteThumbnail]);
+  }, [video.viewkey, setVideoThumbnail]);
+
+  const startPreview = useCallback(() => {
+    const src = video.remoteThumbnail;
+    if (!src || src === 'undefined' || src === 'null' || src === '') return;
+    applyPreviewSrc(src);
+  }, [video.remoteThumbnail, applyPreviewSrc]);
 
   const stopPreview = useCallback(() => {
     clearInterval(intervalRef.current);
     intervalRef.current = null;
+    refreshedRef.current = false;
     const img = previewRef.current;
     if (img) {
       img.style.opacity = '0';
       img.onerror = null;
+      img.onload = null;
     }
   }, []);
+
+  // Row-wide hover (see VideoGrid) drives preview playback instead of this
+  // card's own mouse events, so every card in the hovered row animates together.
+  useEffect(() => {
+    if (rowActive) {
+      startPreview();
+    } else {
+      stopPreview();
+    }
+    return stopPreview;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rowActive]);
 
   const className = [
     'video-card',
@@ -245,11 +293,7 @@ const VideoCard = memo(function VideoCard({ video, isActive, isFocused }) {
       data-viewkey={video.viewkey}
     >
       {/* Thumbnail */}
-      <div
-        className="card-thumb"
-        onMouseEnter={startPreview}
-        onMouseLeave={stopPreview}
-      >
+      <div className="card-thumb">
         {/* Category color strip */}
         {catColor && catColor !== 'transparent' && (
           <div className="card-cat-strip" style={{ background: catColor }} />
@@ -279,12 +323,13 @@ const VideoCard = memo(function VideoCard({ video, isActive, isFocused }) {
           onError={(e) => { e.target.style.display = 'none'; }}
         />
 
-        {/* Preview frame overlay */}
+        {/* Preview frame overlay — src is assigned imperatively by
+           applyPreviewSrc, only once a row is actually hovered, so scrolling
+           the grid alone never fires a wasted request for every visible card. */}
         {video.remoteThumbnail && (
           <img
             ref={previewRef}
             className="preview-img"
-            src={video.remoteThumbnail}
             alt=""
             style={{ opacity: 0 }}
           />

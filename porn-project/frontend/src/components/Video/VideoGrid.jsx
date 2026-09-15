@@ -1,9 +1,28 @@
-import { useRef, useCallback, useEffect } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { AnimatePresence } from 'framer-motion';
 import useVideoStore from '../../stores/useVideoStore';
 import VideoCard from './VideoCard';
 import FilterBar from './FilterBar';
+
+// Fixed columns per density mode — deliberately NOT derived from container
+// width. Cards flex to fill the row (grid-template-columns: repeat(N, 1fr)),
+// so browser zoom and the player panel resizing the grid only change card
+// size, never how many videos are visible per row.
+const COLUMN_COUNTS = { grid: 5, compact: 7, list: 1 };
+
+// Rough initial guess before the virtualizer measures real row height via
+// measureElement — only affects first paint / scrollbar sizing, not layout
+// correctness, since card height (aspect-ratio 16:9 thumb) depends on the
+// container width available at render time.
+function estimateRowHeight(viewMode, containerWidth) {
+  if (viewMode === 'list') return 58;
+  const columns = COLUMN_COUNTS[viewMode] ?? COLUMN_COUNTS.grid;
+  const gap = viewMode === 'compact' ? 10 : 14;
+  const infoHeight = viewMode === 'compact' ? 44 : 62;
+  const cardWidth = (containerWidth - gap * (columns - 1)) / columns;
+  return Math.round((cardWidth * 9) / 16) + infoHeight + gap;
+}
 
 /**
  * Virtualized video grid with dynamic layout density (Standard, Compact, Table)
@@ -18,32 +37,15 @@ export default function VideoGrid() {
   const clearAllFilters = useVideoStore((s) => s.clearAllFilters);
 
   const containerRef = useRef(null);
+  const [hoveredRow, setHoveredRow] = useState(-1);
 
-  // Calculate columns dynamically based on density mode & container width
-  const getColumnCount = useCallback(() => {
-    if (viewMode === 'list') return 1;
-    const container = containerRef.current;
-    if (!container) return 4;
-    const width = container.clientWidth - 32; // container padding
-    const minCardWidth = viewMode === 'compact' ? 165 : 225;
-    const gap = viewMode === 'compact' ? 10 : 14;
-    return Math.max(1, Math.floor(width / (minCardWidth + gap)));
-  }, [viewMode]);
-
-  const columnCount = containerRef.current ? getColumnCount() : (viewMode === 'list' ? 1 : 4);
+  const columnCount = COLUMN_COUNTS[viewMode] ?? COLUMN_COUNTS.grid;
   const rowCount = Math.ceil(filteredVideos.length / columnCount);
-
-  // Estimate row height based on view mode
-  const estimateRowHeight = useCallback(() => {
-    if (viewMode === 'list') return 58;
-    if (viewMode === 'compact') return 195;
-    return 248; // standard grid
-  }, [viewMode]);
 
   const virtualizer = useVirtualizer({
     count: rowCount,
     getScrollElement: () => containerRef.current,
-    estimateSize: estimateRowHeight,
+    estimateSize: () => estimateRowHeight(viewMode, containerRef.current?.clientWidth ?? 1200),
     overscan: 4,
   });
 
@@ -55,6 +57,9 @@ export default function VideoGrid() {
     }
   }, [focusedIndex, columnCount, virtualizer, filteredVideos.length]);
 
+  const handleRowEnter = useCallback((rowIndex) => setHoveredRow(rowIndex), []);
+  const handleRowLeave = useCallback(() => setHoveredRow(-1), []);
+
   return (
     <div className="browse-container">
       {/* Top Faceted Filter Bar */}
@@ -63,7 +68,7 @@ export default function VideoGrid() {
       {/* Main Virtualized Scroll Area */}
       <div className="video-grid-container" ref={containerRef}>
         {isLoading ? (
-          <div className="video-grid">
+          <div className="video-grid" style={{ gridTemplateColumns: `repeat(${columnCount}, 1fr)` }}>
             {Array.from({ length: 12 }).map((_, i) => (
               <div key={i} className="skeleton skeleton-card" />
             ))}
@@ -92,12 +97,15 @@ export default function VideoGrid() {
               return (
                 <div
                   key={virtualRow.key}
+                  data-index={virtualRow.index}
+                  ref={virtualizer.measureElement}
+                  onMouseEnter={() => handleRowEnter(virtualRow.index)}
+                  onMouseLeave={handleRowLeave}
                   style={{
                     position: 'absolute',
                     top: 0,
                     left: 0,
                     width: '100%',
-                    height: `${virtualRow.size}px`,
                     transform: `translateY(${virtualRow.start}px)`,
                   }}
                 >
@@ -107,7 +115,7 @@ export default function VideoGrid() {
                       viewMode === 'compact' && 'compact-grid',
                       viewMode === 'list' && 'list-view',
                     ].filter(Boolean).join(' ')}
-                    style={{ height: '100%' }}
+                    style={viewMode !== 'list' ? { gridTemplateColumns: `repeat(${columnCount}, 1fr)` } : undefined}
                   >
                     <AnimatePresence>
                       {rowVideos.map((video, idx) => {
@@ -118,6 +126,7 @@ export default function VideoGrid() {
                             video={video}
                             isActive={currentVideo?.viewkey === video.viewkey}
                             isFocused={focusedIndex === globalIdx}
+                            rowActive={hoveredRow === virtualRow.index}
                           />
                         );
                       })}
