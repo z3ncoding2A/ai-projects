@@ -10,15 +10,38 @@ export default function Sidebar() {
   const collapsed = useVideoStore((s) => s.isSidebarCollapsed);
   const toggleSidebar = useVideoStore((s) => s.toggleSidebar);
   const playlists = useVideoStore((s) => s.playlists);
+  const activePlaylist = useVideoStore((s) => s.activePlaylist);
+  const setActivePlaylist = useVideoStore((s) => s.setActivePlaylist);
+  const tags = useVideoStore((s) => s.tags);
+  const activeTag = useVideoStore((s) => s.activeTag);
+  const setActiveTag = useVideoStore((s) => s.setActiveTag);
   const getCategoryCounts = useVideoStore((s) => s.getCategoryCounts);
   const categoryTree = useVideoStore((s) => s.categoryTree);
   const categories = useVideoStore((s) => s.categories);
   const blacklist = useVideoStore((s) => s.blacklist);
   const moveCategory = useVideoStore((s) => s.moveCategory);
 
-  const counts = useMemo(() => getCategoryCounts(), [categoryTree, categories, blacklist]);
+  const counts = useMemo(
+    () => getCategoryCounts(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [categoryTree, categories, blacklist, getCategoryCounts]
+  );
+
+  // Aggregate tags with frequency counts
+  const tagCounts = useMemo(() => {
+    const map = {};
+    for (const tagList of Object.values(tags)) {
+      if (Array.isArray(tagList)) {
+        for (const t of tagList) {
+          map[t] = (map[t] || 0) + 1;
+        }
+      }
+    }
+    return Object.entries(map).sort((a, b) => b[1] - a[1]);
+  }, [tags]);
 
   const [collapsedIds, setCollapsedIds] = useState(() => new Set());
+  const [showTagsSection, setShowTagsSection] = useState(true);
   const [formModal, setFormModal] = useState(null);   // { mode: 'create'|'rename', parentId?, node? }
   const [deleteTarget, setDeleteTarget] = useState(null); // node
 
@@ -63,7 +86,10 @@ export default function Sidebar() {
       <div className="sidebar-header">
         {!collapsed && (
           <div className="sidebar-brand">
-            z3ncoding <span>Library</span>
+            <span className="brand-logo">⚡</span>
+            <div className="brand-text">
+              z3ncoding <span>Workstation</span>
+            </div>
           </div>
         )}
         <button
@@ -78,58 +104,107 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <nav className="sidebar-nav">
-        {!collapsed && (
-          <div className="sidebar-section-title" style={{ display: 'flex', alignItems: 'center' }}>
-            <span>Categories</span>
-            <button
-              className="cat-tree-action-btn"
-              style={{ marginLeft: 'auto' }}
-              title="New top-level category"
-              onClick={() => setFormModal({ mode: 'create', parentId: null })}
-            >
-              +
-            </button>
-          </div>
-        )}
+        {/* Core Library Views */}
+        {!collapsed && <div className="sidebar-section-title">Library</div>}
 
-        {/* Main Collection ("Uncategorized") — pinned above the tree */}
+        {/* All Videos */}
         <div
-          className={`sidebar-item${activeTab === 'none' ? ' active' : ''}`}
+          className={`sidebar-item${activeTab === 'all' && !activePlaylist && !activeTag ? ' active' : ''}`}
+          onClick={() => setTab('all')}
+          title={collapsed ? 'All Videos' : undefined}
+        >
+          <span className="sidebar-item-icon">🎬</span>
+          {!collapsed && (
+            <>
+              <span className="sidebar-item-label">All Videos</span>
+              <span className="sidebar-item-count">{counts.all || 0}</span>
+            </>
+          )}
+        </div>
+
+        {/* Uncategorized */}
+        <div
+          className={`sidebar-item${activeTab === 'none' && !activePlaylist && !activeTag ? ' active' : ''}`}
           onClick={() => setTab('none')}
-          title={collapsed ? 'Main Collection' : undefined}
+          title={collapsed ? 'Uncategorized' : undefined}
         >
           <span className="sidebar-item-icon">📚</span>
           {!collapsed && (
             <>
-              <span className="sidebar-item-label">Main Collection</span>
+              <span className="sidebar-item-label">Uncategorized</span>
               <span className="sidebar-item-count">{counts.none || 0}</span>
             </>
           )}
         </div>
 
+        {/* Recently Watched */}
+        <div
+          className={`sidebar-item${activeTab === 'recent' && !activePlaylist && !activeTag ? ' active' : ''}`}
+          onClick={() => setTab('recent')}
+          title={collapsed ? 'Recently Watched' : undefined}
+        >
+          <span className="sidebar-item-icon">⏱</span>
+          {!collapsed && (
+            <>
+              <span className="sidebar-item-label">Recently Watched</span>
+              <span className="sidebar-item-count">{counts.recent || 0}</span>
+            </>
+          )}
+        </div>
+
+        {/* Blacklist / Trash */}
+        <div
+          className={`sidebar-item${activeTab === 'blacklist' && !activePlaylist && !activeTag ? ' active' : ''}`}
+          onClick={() => setTab('blacklist')}
+          title={collapsed ? 'Blacklisted' : undefined}
+        >
+          <span className="sidebar-item-icon">🚫</span>
+          {!collapsed && (
+            <>
+              <span className="sidebar-item-label">Blacklist / Trash</span>
+              <span className="sidebar-item-count">{counts.blacklist || 0}</span>
+            </>
+          )}
+        </div>
+
+        {/* Categories Section */}
         {!collapsed && (
-          <CategoryTreeList
-            tree={categoryTree}
-            counts={counts}
-            activeId={activeTab}
-            onSelect={(node) => setTab(node.id)}
-            collapsedIds={collapsedIds}
-            onToggleExpand={toggleExpand}
-            renderActions={renderActions}
-            draggable
-            onReparent={moveCategory}
-          />
+          <>
+            <div className="sidebar-section-title" style={{ display: 'flex', alignItems: 'center', marginTop: 14 }}>
+              <span>Categories</span>
+              <button
+                className="cat-tree-action-btn"
+                style={{ marginLeft: 'auto' }}
+                title="New top-level category"
+                onClick={() => setFormModal({ mode: 'create', parentId: null })}
+              >
+                +
+              </button>
+            </div>
+
+            <CategoryTreeList
+              tree={categoryTree}
+              counts={counts}
+              activeId={activeTab}
+              onSelect={(node) => setTab(node.id)}
+              collapsedIds={collapsedIds}
+              onToggleExpand={toggleExpand}
+              renderActions={renderActions}
+              draggable
+              onReparent={moveCategory}
+            />
+          </>
         )}
 
         {/* Playlists section */}
         {Object.keys(playlists).length > 0 && !collapsed && (
           <>
-            <div className="sidebar-section-title" style={{ marginTop: 8 }}>Playlists</div>
+            <div className="sidebar-section-title" style={{ marginTop: 14 }}>Playlists</div>
             {Object.entries(playlists).map(([name, items]) => (
               <div
                 key={name}
-                className="sidebar-item"
-                onClick={() => {/* TODO: playlist view */}}
+                className={`sidebar-item${activePlaylist === name ? ' active' : ''}`}
+                onClick={() => setActivePlaylist(name)}
                 title={`${items.length} videos`}
               >
                 <span className="sidebar-item-icon">🎵</span>
@@ -137,6 +212,35 @@ export default function Sidebar() {
                 <span className="sidebar-item-count">{items.length}</span>
               </div>
             ))}
+          </>
+        )}
+
+        {/* Tags section */}
+        {tagCounts.length > 0 && !collapsed && (
+          <>
+            <div
+              className="sidebar-section-title clickable"
+              style={{ display: 'flex', alignItems: 'center', marginTop: 14, cursor: 'pointer' }}
+              onClick={() => setShowTagsSection(!showTagsSection)}
+            >
+              <span>Tags ({tagCounts.length})</span>
+              <span style={{ marginLeft: 'auto', fontSize: '0.7rem' }}>
+                {showTagsSection ? '▾' : '▸'}
+              </span>
+            </div>
+            {showTagsSection && (
+              <div className="sidebar-tags-cloud">
+                {tagCounts.slice(0, 15).map(([tag, count]) => (
+                  <button
+                    key={tag}
+                    className={`sidebar-tag-chip${activeTag === tag ? ' active' : ''}`}
+                    onClick={() => setActiveTag(tag)}
+                  >
+                    #{tag} <span className="tag-count">{count}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </>
         )}
       </nav>
@@ -152,7 +256,7 @@ export default function Sidebar() {
             }}
           >
             <span className="sidebar-item-icon">📊</span>
-            <span className="sidebar-item-label">Stats</span>
+            <span className="sidebar-item-label">Analytics & Stats</span>
           </div>
         </div>
       )}

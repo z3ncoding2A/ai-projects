@@ -17,6 +17,7 @@ export default function TopBar() {
   const clearSelection = useVideoStore((s) => s.clearSelection);
   const filteredCount = useVideoStore((s) => s.filteredVideos.length);
   const totalCount = useVideoStore((s) => s.videos.length);
+  const reshuffle = useVideoStore((s) => s.reshuffle);
 
   const searchRef = useRef(null);
   const debounceRef = useRef(null);
@@ -24,99 +25,149 @@ export default function TopBar() {
   const handleSearch = useCallback((e) => {
     const val = e.target.value;
     clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => setSearchQuery(val), 200);
+    debounceRef.current = setTimeout(() => setSearchQuery(val), 150);
+  }, [setSearchQuery]);
+
+  const handleClearSearch = useCallback(() => {
+    if (searchRef.current) {
+      searchRef.current.value = '';
+      searchRef.current.focus();
+    }
+    setSearchQuery('');
   }, [setSearchQuery]);
 
   return (
     <header className="topbar">
-      {/* Search */}
+      {/* Omni-search input */}
       <div className="search-wrapper">
         <span className="search-icon">🔍</span>
         <input
           ref={searchRef}
           className="search-input"
           type="text"
-          placeholder="Search videos..."
+          placeholder="Omni-search titles, tags... (Press /)"
           defaultValue={searchQuery}
           onChange={handleSearch}
           autoComplete="off"
+          spellCheck="false"
         />
-        <span className="search-shortcut">/</span>
+        {searchQuery ? (
+          <button className="search-clear-btn" onClick={handleClearSearch} title="Clear search">
+            ✕
+          </button>
+        ) : (
+          <span className="search-shortcut">/</span>
+        )}
       </div>
 
-      {/* Sort */}
+      {/* Controls: Sort, Density, Bulk, Count */}
       <div className="topbar-controls">
-        <select
-          className="topbar-select"
-          value={sortMode}
-          onChange={(e) => setSortMode(e.target.value)}
-        >
-          <option value="newest">Recently Scraped</option>
-          <option value="title-az">Title A-Z</option>
-          <option value="views-desc">Most Viewed</option>
-          <option value="duration-desc">Longest</option>
-        </select>
+        {/* Quick Sort Dropdown */}
+        <div className="topbar-sort-group">
+          <select
+            className="topbar-select"
+            value={sortMode}
+            onChange={(e) => setSortMode(e.target.value)}
+          >
+            <option value="random">🔀 Randomize</option>
+            <option value="newest">🆕 Recently Scraped</option>
+            <option value="title-az">🔤 Title A-Z</option>
+            <option value="views-desc">👁 Most Viewed</option>
+            <option value="duration-desc">⏱ Longest Duration</option>
+          </select>
 
-        {/* View toggle */}
-        <button
-          className={`topbar-btn${viewMode === 'grid' ? ' active' : ''}`}
-          onClick={() => setViewMode('grid')}
-          title="Grid view"
-        >
-          ▦
-        </button>
-        <button
-          className={`topbar-btn${viewMode === 'list' ? ' active' : ''}`}
-          onClick={() => setViewMode('list')}
-          title="List view"
-        >
-          ☰
-        </button>
+          {sortMode === 'random' && (
+            <button
+              className="topbar-btn shuffle-btn"
+              onClick={reshuffle}
+              title="Reshuffle library order"
+            >
+              🔀
+            </button>
+          )}
+        </div>
 
         <div className="topbar-divider" />
 
+        {/* 3 View Density Modes */}
+        <div className="density-toggle-group">
+          <button
+            className={`topbar-btn${viewMode === 'grid' ? ' active' : ''}`}
+            onClick={() => setViewMode('grid')}
+            title="Comfortable Grid (Standard)"
+          >
+            ▦
+          </button>
+          <button
+            className={`topbar-btn${viewMode === 'compact' ? ' active' : ''}`}
+            onClick={() => setViewMode('compact')}
+            title="Compact Grid"
+          >
+            ☷
+          </button>
+          <button
+            className={`topbar-btn${viewMode === 'list' ? ' active' : ''}`}
+            onClick={() => setViewMode('list')}
+            title="Dense Table / List View"
+          >
+            ☰
+          </button>
+        </div>
+
+        <div className="topbar-divider" />
+
+        {/* Advanced Search modal trigger */}
         <button
           className="topbar-btn"
           onClick={() => {
             const el = document.getElementById('advanced-search-trigger');
             if (el) el.click();
           }}
-          title="Advanced Search"
+          title="Advanced Filter & Regex Search"
         >
           ⚙ Adv
         </button>
 
-        {/* Bulk mode */}
+        {/* Bulk Selection mode */}
         <button
           className={`topbar-btn${isBulkMode ? ' active' : ''}`}
           onClick={toggleBulkMode}
+          title="Toggle Multi-Select Mode"
         >
           {isBulkMode ? `✓ ${selectedVideos.size} selected` : '☑ Select'}
         </button>
 
         {isBulkMode && selectedVideos.size > 0 && (
           <>
-            <button className="topbar-btn" onClick={() => openPicker({ mode: 'bulk' })}>
-              🏷 Bulk Categorize
+            <button
+              className="topbar-btn action-btn"
+              onClick={() => openPicker({ mode: 'bulk' })}
+            >
+              🏷 Categorize ({selectedVideos.size})
             </button>
-            <button className="topbar-btn" onClick={bulkDelete} style={{ color: '#e74c3c' }}>
-              🗑 Delete
+            <button
+              className="topbar-btn action-btn danger"
+              onClick={bulkDelete}
+            >
+              🗑 Delete ({selectedVideos.size})
             </button>
           </>
         )}
 
         {isBulkMode && (
-          <>
-            <button className="topbar-btn" onClick={selectAll}>All</button>
-            <button className="topbar-btn" onClick={clearSelection}>None</button>
-          </>
+          <div className="bulk-quick-actions">
+            <button className="topbar-btn-mini" onClick={selectAll}>All</button>
+            <button className="topbar-btn-mini" onClick={clearSelection}>None</button>
+          </div>
         )}
 
         <div className="topbar-divider" />
 
-        {/* Count */}
-        <div className="video-count">
-          <b>{filteredCount}</b> / {totalCount}
+        {/* Stats Counter */}
+        <div className="video-count" title="Filtered / Total Videos">
+          <span className="count-active">{filteredCount.toLocaleString()}</span>
+          <span className="count-sep">/</span>
+          <span className="count-total">{totalCount.toLocaleString()}</span>
         </div>
       </div>
     </header>

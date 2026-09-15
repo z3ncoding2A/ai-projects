@@ -4,20 +4,20 @@ import useKeyboardNav from './hooks/useKeyboardNav';
 import Sidebar from './components/Layout/Sidebar';
 import TopBar from './components/Layout/TopBar';
 import MiniPlayer from './components/Layout/MiniPlayer';
-import HeroBanner from './components/Video/HeroBanner';
 import VideoGrid from './components/Video/VideoGrid';
 import PlayerPanel from './components/Player/PlayerPanel';
 import QueueWidget from './components/Queue/QueueWidget';
 import StatsPanel from './components/Features/StatsPanel';
 import AdvancedSearchModal from './components/Features/AdvancedSearchModal';
 import CategoryPickerModal from './components/Features/CategoryPickerModal';
+import InspectorDrawer from './components/Features/InspectorDrawer';
 
 export default function App() {
   const init = useVideoStore((s) => s.init);
-  const isLoading = useVideoStore((s) => s.isLoading);
   const error = useVideoStore((s) => s.error);
   const currentVideo = useVideoStore((s) => s.currentVideo);
   const isTheaterMode = useVideoStore((s) => s.isTheaterMode);
+  const inspectorVideo = useVideoStore((s) => s.inspectorVideo);
 
   const [showStats, setShowStats] = useState(false);
   const [showAdvancedSearch, setShowAdvancedSearch] = useState(false);
@@ -92,7 +92,6 @@ export default function App() {
         <div className="app-content">
           {/* Browse panel */}
           <div className="browse-panel">
-            <HeroBanner />
             <VideoGrid />
           </div>
 
@@ -101,20 +100,8 @@ export default function App() {
             <div
               ref={resizerRef}
               onMouseDown={startResize}
-              style={{
-                width: 6,
-                cursor: 'col-resize',
-                background: 'var(--bg-surface)',
-                borderLeft: '1px solid var(--border)',
-                borderRight: '1px solid var(--border)',
-                flexShrink: 0,
-                zIndex: 10,
-                transition: isResizing.current ? 'none' : 'background 0.2s',
-              }}
-              onMouseEnter={(e) => { e.target.style.background = 'var(--accent)'; }}
-              onMouseLeave={(e) => {
-                if (!isResizing.current) e.target.style.background = 'var(--bg-surface)';
-              }}
+              className="player-resizer"
+              title="Drag to resize video player"
             />
           )}
 
@@ -135,6 +122,9 @@ export default function App() {
 
       {/* Queue widget */}
       <QueueWidget />
+
+      {/* Slide-over Inspector Drawer */}
+      {inspectorVideo && <InspectorDrawer />}
 
       {/* Hidden triggers for modals */}
       <button

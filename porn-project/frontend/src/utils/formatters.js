@@ -36,6 +36,9 @@ export const CATEGORY_LABELS = {
 /** @deprecated see CATEGORY_COLORS */
 export const ASSIGNED_CATEGORIES = ['public', 'pending', 'least', 'average', 'most', 'explode', 'related', 'recommended'];
 
+/** Categories that represent "not yet sorted by the user" — scraper defaults, not a real choice. */
+export const UNSORTED_CATEGORIES = new Set(['none', 'pending', 'related', 'recommended']);
+
 /** Seed data for the category tree, used once on first load if categories-schema.json is empty. */
 export const SEED_CATEGORIES = [
   { id: 'public',      name: 'Public',      color: '#2ecc71', icon: '🌍', parentId: null, sortOrder: 0 },

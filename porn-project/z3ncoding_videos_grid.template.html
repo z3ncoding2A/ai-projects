@@ -7,6 +7,7 @@
     <title>z3ncoding Library (__TOTAL_VIDEOS_COUNT__)</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
     <style>
         :root {
             --bg-base:          #0a0b10;
@@ -28,6 +29,8 @@
             --cat-avg:     #3b82f6;
             --cat-most:    #f59e0b;
             --cat-explode: #ec4899;
+            --cat-related:     #06b6d4;
+            --cat-recommended: #f97316;
 
             --topbar-h: 64px;
             --list-w: 45%;
@@ -112,6 +115,10 @@
         .tab-btn.tab-avg.active { background: var(--cat-avg); border-color: var(--cat-avg); color: #fff; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4); }
         .tab-btn.tab-least { color: var(--cat-least); }
         .tab-btn.tab-least.active { background: var(--cat-least); border-color: var(--cat-least); color: #fff; box-shadow: 0 4px 12px rgba(100, 116, 139, 0.4); }
+        .tab-btn.tab-related { color: var(--cat-related); }
+        .tab-btn.tab-related.active { background: var(--cat-related); border-color: var(--cat-related); color: #fff; box-shadow: 0 4px 12px rgba(6, 182, 212, 0.4); }
+        .tab-btn.tab-recommended { color: var(--cat-recommended); }
+        .tab-btn.tab-recommended.active { background: var(--cat-recommended); border-color: var(--cat-recommended); color: #fff; box-shadow: 0 4px 12px rgba(249, 115, 22, 0.4); }
 
         .topbar-spacer { flex: 1; }
 
@@ -389,6 +396,8 @@
         .btn-avg     { background: var(--cat-avg); }
         .btn-most    { background: var(--cat-most); }
         .btn-explode { background: var(--cat-explode); }
+        .btn-related   { background: var(--cat-related); }
+        .btn-recommended { background: var(--cat-recommended); }
         .btn-reset   { background: #444; }
         .btn-delete  { background: #c0392b; }
 
@@ -823,6 +832,8 @@
 <!-- TOP BAR -->
 <header class="top-bar">
     <div class="brand">z3ncoding <span>Library</span></div>
+    <button class="tab-btn tab-related"      id="tab-related"      onclick="setTab('related')">Related</button>
+    <button class="tab-btn tab-recommended"  id="tab-recommended"  onclick="setTab('recommended')">Recommended</button>
     <button class="tab-btn active"           id="tab-none"    onclick="setTab('none')">Main Collection</button>
     <button class="tab-btn tab-public"       id="tab-public"  onclick="setTab('public')">Public</button>
     <button class="tab-btn tab-pending"      id="tab-pending" onclick="setTab('pending')">Pending</button>
@@ -981,6 +992,8 @@
         <select id="bulk-action-cat">
             <option value="">Categorize as...</option>
             <option value="none">None</option>
+            <option value="related">Related</option>
+            <option value="recommended">Recommended</option>
             <option value="public">Public</option>
             <option value="pending">Pending</option>
             <option value="least">Least</option>
@@ -1059,6 +1072,10 @@
     const qualityMenu  = document.getElementById('quality-menu');
     const qualityLabel = document.getElementById('quality-label');
 
+    let hlsInstance = null;
+    let currentPlayUrl = null;
+    let currentPlayViewkey = null;
+
     // Quality menu click handling
     if (qualityBtn && qualityMenu) {
         qualityBtn.addEventListener('click', (e) => {
@@ -1076,7 +1093,7 @@
 
     // ── Helpers ──
     function getCategoryColor(cat) {
-        const map = { public:'var(--cat-public)', pending:'var(--cat-pending)', least:'var(--cat-least)', average:'var(--cat-avg)', most:'var(--cat-most)', explode:'var(--cat-explode)' };
+        const map = { related:'var(--cat-related)', recommended:'var(--cat-recommended)', public:'var(--cat-public)', pending:'var(--cat-pending)', least:'var(--cat-least)', average:'var(--cat-avg)', most:'var(--cat-most)', explode:'var(--cat-explode)' };
         return map[cat] || 'transparent';
     }
 
@@ -1167,7 +1184,7 @@
         filteredVideos = ALL_VIDEOS.filter(vid => {
             const cat       = getVideoCategory(vid);
             const isDeleted = deleted.has(vid[8]);
-            const matchTab  = (currentTab === 'none') ? !['public','pending','least','average','most','explode'].includes(cat)
+            const matchTab  = (currentTab === 'none') ? !['related','recommended','public','pending','least','average','most','explode'].includes(cat)
                                                        : cat === currentTab;
             const matchQ    = query === '' || vid[10].includes(query);
             
@@ -1349,30 +1366,95 @@
         }
     }
 
+    function destroyHls() {
+        if (hlsInstance) {
+            hlsInstance.destroy();
+            hlsInstance = null;
+        }
+    }
+
+    function fallbackToIframe() {
+        destroyHls();
+        nativePlayer.onerror = null;
+        nativePlayer.src = '';
+        nativeWrap.style.display = 'none';
+        qualityBtn.classList.remove('visible');
+
+        const embedUrl = buildEmbedUrl(currentPlayUrl, currentPlayViewkey);
+        playerIframe.src = embedUrl || currentPlayUrl;
+        playerIframe.style.display = 'block';
+
+        const vid = ALL_VIDEOS.find(v => v[8] === currentPlayViewkey);
+        if (vid && vid[4]) {
+            const timeParts = vid[4].split(':');
+            let durationSeconds = 0;
+            if (timeParts.length === 3) { // hh:mm:ss
+                durationSeconds = (parseInt(timeParts[0]) * 3600) + (parseInt(timeParts[1]) * 60) + parseInt(timeParts[2]);
+            } else if (timeParts.length === 2) { // mm:ss
+                durationSeconds = (parseInt(timeParts[0]) * 60) + parseInt(timeParts[1]);
+            }
+
+            if (durationSeconds > 0) {
+                const durationMs = (durationSeconds + 2) * 1000;
+                autoNextTimer = setTimeout(() => {
+                    playNextVideo();
+                }, durationMs);
+            }
+        }
+    }
+
     function selectQuality(stream, forcePlay = false) {
         const currentTime = nativePlayer.currentTime;
         const wasPaused = nativePlayer.paused;
-        
-        nativePlayer.src = stream.url;
+
+        destroyHls();
         qualityLabel.textContent = stream.quality;
-        
-        // Restore playhead position and playback state
-        nativePlayer.addEventListener('loadedmetadata', function onMetadata() {
+
+        function restorePlayback() {
             nativePlayer.currentTime = currentTime;
             if (!wasPaused || forcePlay) nativePlayer.play();
-            nativePlayer.removeEventListener('loadedmetadata', onMetadata);
-        });
-        
+        }
+
+        if (window.Hls && Hls.isSupported()) {
+            hlsInstance = new Hls();
+            hlsInstance.loadSource(stream.url);
+            hlsInstance.attachMedia(nativePlayer);
+            hlsInstance.on(Hls.Events.MANIFEST_PARSED, function onManifest() {
+                hlsInstance.off(Hls.Events.MANIFEST_PARSED, onManifest);
+                restorePlayback();
+            });
+            hlsInstance.on(Hls.Events.ERROR, (event, data) => {
+                if (data.fatal) {
+                    console.warn('hls.js fatal error, falling back to iframe embed:', data);
+                    fallbackToIframe();
+                }
+            });
+        } else if (nativePlayer.canPlayType('application/vnd.apple.mpegurl')) {
+            // Safari-like engines with native HLS support
+            nativePlayer.src = stream.url;
+            nativePlayer.addEventListener('loadedmetadata', function onMetadata() {
+                nativePlayer.removeEventListener('loadedmetadata', onMetadata);
+                restorePlayback();
+            });
+        } else {
+            console.warn('No HLS support available, falling back to iframe embed');
+            fallbackToIframe();
+            return;
+        }
+
         // Highlight active quality item in menu
         document.querySelectorAll('.quality-item').forEach(btn => {
             if (btn.dataset.quality === stream.quality) btn.classList.add('active');
             else btn.classList.remove('active');
         });
-        
+
         qualityMenu.classList.remove('show');
     }
 
     async function openVideoPlayer(url, title, viewkey) {
+        currentPlayUrl = url;
+        currentPlayViewkey = viewkey;
+
         playerEmpty.style.display  = 'none';
 
         npTitle.textContent = decodeHTMLEntities(title);
@@ -1393,25 +1475,31 @@
         // Hide both player types initially
         playerIframe.src = 'about:blank';
         playerIframe.style.display = 'none';
-        
+
+        destroyHls();
         nativePlayer.src = '';
         nativeWrap.style.display = 'none';
         qualityBtn.classList.remove('visible');
         qualityMenu.innerHTML = '';
         qualityLabel.textContent = 'Quality';
 
+        nativePlayer.onerror = () => {
+            console.warn('native-player element error, falling back to iframe embed:', nativePlayer.error);
+            fallbackToIframe();
+        };
+
         // 1. Try to fetch direct stream from python server
         try {
             const response = await fetch(`/api/streams?url=${encodeURIComponent(url)}`);
             if (!response.ok) throw new Error('API failed');
-            
+
             const data = await response.json();
             if (data.streams && data.streams.length > 0) {
                 const streams = data.streams;
-                
+
                 nativeWrap.style.display = 'block';
                 qualityBtn.classList.add('visible');
-                
+
                 streams.forEach(stream => {
                     const btn = document.createElement('button');
                     btn.className = 'quality-item';
@@ -1423,9 +1511,9 @@
                     };
                     qualityMenu.appendChild(btn);
                 });
-                
+
                 selectQuality(streams[0], true);
-                
+
                 nativePlayer.onended = () => {
                     playNextVideo();
                 };
@@ -1436,27 +1524,7 @@
         }
 
         // 2. Fallback to Iframe embed
-        const embedUrl = buildEmbedUrl(url, viewkey);
-        playerIframe.src = embedUrl || url;
-        playerIframe.style.display = 'block';
-        
-        const vid = ALL_VIDEOS.find(v => v[8] === viewkey);
-        if (vid && vid[4]) {
-            const timeParts = vid[4].split(':');
-            let durationSeconds = 0;
-            if (timeParts.length === 3) { // hh:mm:ss
-                durationSeconds = (parseInt(timeParts[0]) * 3600) + (parseInt(timeParts[1]) * 60) + parseInt(timeParts[2]);
-            } else if (timeParts.length === 2) { // mm:ss
-                durationSeconds = (parseInt(timeParts[0]) * 60) + parseInt(timeParts[1]);
-            }
-            
-            if (durationSeconds > 0) {
-                const durationMs = (durationSeconds + 2) * 1000;
-                autoNextTimer = setTimeout(() => {
-                    playNextVideo();
-                }, durationMs);
-            }
-        }
+        fallbackToIframe();
     }
 
     // ── Modals ──

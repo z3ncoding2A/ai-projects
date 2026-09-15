@@ -50,16 +50,32 @@ def load_config():
         print(f"Error loading config: {e}")
         return DEFAULT_CONFIG
 
-def get_selected_text():
+def notify(title, message, timeout=2000):
     try:
-        # Get primary selection (highlighted text) via wl-paste
-        result = subprocess.run(['wl-paste', '-p'], capture_output=True, text=True, check=True)
-        return result.stdout.strip()
-    except subprocess.CalledProcessError:
-        return ""
-    except FileNotFoundError:
-        print("Error: wl-paste not found. Ensure wl-clipboard is installed.")
-        sys.exit(1)
+        subprocess.run(["notify-send", "-a", "Hypr-TTS", "-t", str(timeout), title, message], stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
+
+def get_selected_text():
+    # 1. Try primary selection (highlighted text with cursor)
+    try:
+        result = subprocess.run(['wl-paste', '-p', '--no-newline'], capture_output=True, text=True)
+        text = result.stdout.strip()
+        if text:
+            return text
+    except Exception as e:
+        log_debug(f"Primary clipboard read failed: {e}")
+
+    # 2. Fallback to standard clipboard
+    try:
+        result = subprocess.run(['wl-paste', '--no-newline'], capture_output=True, text=True)
+        text = result.stdout.strip()
+        if text:
+            return text
+    except Exception as e:
+        log_debug(f"Standard clipboard read failed: {e}")
+
+    return ""
 
 def kill_previous():
     # Kill any previously running hypr-tts mpv processes
@@ -109,30 +125,53 @@ async def stream_chunk_to_mpv(communicate, mpv_stdin):
             mpv_stdin.write(chunk["data"])
             mpv_stdin.flush()
 
+def log_debug(msg):
+    try:
+        with open("/tmp/hypr-tts.log", "a") as f:
+            f.write(msg + "\n")
+    except Exception:
+        pass
+
 async def main():
+    log_debug("--- TTS triggered ---")
     config = load_config()
     text = get_selected_text()
-
+    
+    log_debug(f"Selected text length: {len(text)}")
     if not text:
+        log_debug("No text selected, exiting.")
+        notify("Hypr-TTS", "No text selected or highlighted.", 2000)
         return
 
     # Clean text to remove common syntax characters (like asterisks, markdown, brackets)
     # so the TTS doesn't read them out loud ("asterisk", "left bracket", etc.)
     import re
     text = re.sub(r'[*_`~#\[\]<>{}]', '', text)
+    log_debug(f"Cleaned text length: {len(text)}")
 
     kill_previous()
+    notify("Hypr-TTS", "Speaking...", 1500)
 
     # Calculate rate string for edge-tts
     rate_mult = config.get("rate_multiplier", 1.0)
     rate_percent = int(round((rate_mult - 1.0) * 100))
     rate_str = f"+{rate_percent}%" if rate_percent >= 0 else f"{rate_percent}%"
+    log_debug(f"Rate string: {rate_str}")
 
     voice = config.get("voice", "en-GB-SoniaNeural")
+    log_debug(f"Voice: {voice}")
+
+    # Calculate volume for edge-tts and mpv
+    vol_mult = float(config.get("volume", 1.0))
+    vol_percent = max(-100, min(100, int(round((vol_mult - 1.0) * 100))))
+    vol_str = f"+{vol_percent}%" if vol_percent >= 0 else f"{vol_percent}%"
+    mpv_vol = str(int(max(10, min(1000, vol_mult * 100))))
+    log_debug(f"Volume multiplier: {vol_mult}, Edge-TTS: {vol_str}, MPV Volume: {mpv_vol}%")
 
     try:
         import edge_tts
-    except ImportError:
+    except ImportError as e:
+        log_debug(f"ImportError: {e}")
         print("Error: edge-tts is not installed. Please install it.")
         sys.exit(1)
 
@@ -146,29 +185,37 @@ async def main():
     # Split text into safe-sized chunks to avoid edge-tts truncation
     chunks = split_into_chunks(text, max_chars=1500)
 
-    # Open a single mpv process; stream all chunks into it sequentially
+    # Open a single mpv process with clean stereo output
+    log_debug("Starting mpv process...")
     mpv_process = subprocess.Popen(
         [
             "mpv",
             "--no-video",
+            "--audio-channels=stereo",
+            "--volume=100",
             "--title=hypr-tts-mpv-player",
             "--no-terminal",
             "-"
         ],
         stdin=subprocess.PIPE,
         stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
+        stderr=None
     )
 
     try:
-        for chunk_text in chunks:
-            communicate = edge_tts.Communicate(chunk_text, voice, rate=rate_str)
+        log_debug(f"Streaming {len(chunks)} chunks to mpv...")
+        for i, chunk_text in enumerate(chunks):
+            log_debug(f"Streaming chunk {i+1}...")
+            communicate = edge_tts.Communicate(chunk_text, voice, rate=rate_str, volume=vol_str)
             await stream_chunk_to_mpv(communicate, mpv_process.stdin)
+        log_debug("Finished streaming all chunks.")
     except Exception as e:
+        log_debug(f"Error during TTS generation: {e}")
         print(f"Error during TTS generation: {e}")
     finally:
         mpv_process.stdin.close()
         mpv_process.wait()
+        log_debug("mpv process exited.")
 
 if __name__ == "__main__":
     asyncio.run(main())

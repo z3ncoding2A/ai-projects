@@ -7,6 +7,7 @@ import {
   getDescendantIds,
   generateId,
   SEED_CATEGORIES,
+  UNSORTED_CATEGORIES,
 } from '../utils/formatters';
 
 /** Debounce helper */
@@ -17,6 +18,31 @@ function debounce(fn, ms) {
     timer = setTimeout(() => fn(...args), ms);
   };
 }
+
+/** Mulberry32 seeded PRNG — deterministic shuffle that stays stable across re-filters. */
+function mulberry32(seed) {
+  let a = seed;
+  return () => {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** Fisher-Yates shuffle using a seeded RNG so the order only changes when the seed does. */
+function seededShuffle(arr, seed) {
+  const rand = mulberry32(seed);
+  const result = arr.slice();
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
+// Videos watched within this window are pushed to the back of the random shuffle.
+const RECENTLY_WATCHED_MS = 14 * 24 * 60 * 60 * 1000;
 
 // Debounced save functions — persist to disk via API
 const debouncedSaveCategories = debounce((data) => api.saveCategories(data).catch(console.error), 400);
@@ -40,25 +66,32 @@ const useVideoStore = create((set, get) => ({
 
   // ── UI State ──────────────────────────────────────────────────────
   pickerTarget: null,        // { mode: 'single', viewkey } | { mode: 'bulk' } | null
-  activeTab: 'none',
+  activeTab: 'all',          // 'all' | 'none' | 'recent' | 'blacklist' | categoryId
+  activePlaylist: null,      // playlist name string | null
+  activeTag: null,           // tag string | null
+  durationFilter: 'all',     // 'all' | 'under5' | '5to15' | '15to30' | 'over30'
+  watchFilter: 'all',        // 'all' | 'unwatched' | 'watched'
   searchQuery: '',
   advancedSearch: {
     minViews: '',
     minDuration: '',
     regex: '',
   },
-  sortMode: 'newest',
-  viewMode: 'grid',       // 'grid' | 'list'
+  sortMode: 'random',
+  shuffleSeed: Date.now(),
+  viewMode: 'grid',          // 'grid' (comfortable) | 'compact' | 'list' (dense table)
   isBulkMode: false,
   selectedVideos: new Set(),
   isTheaterMode: false,
   isSidebarCollapsed: false,
+  focusedIndex: -1,          // Keyboard navigation index
+  inspectorVideo: null,      // Video currently shown in inspector drawer
 
   // ── Player State ──────────────────────────────────────────────────
   currentVideo: null,
   queue: [],
   isPlaying: false,
-  playerMode: 'idle',     // 'idle' | 'native' | 'iframe'
+  playerMode: 'idle',        // 'idle' | 'native' | 'iframe'
   streams: [],
   activeStreamIdx: 0,
 
@@ -88,13 +121,13 @@ const useVideoStore = create((set, get) => ({
       }
 
       set({
-        videos,
-        categories,
-        categoryTree: tree,
-        blacklist,
-        playlists,
-        tags,
-        watchHistory: history,
+        videos: videos || [],
+        categories: categories || {},
+        categoryTree: tree || [],
+        blacklist: blacklist || [],
+        playlists: playlists || {},
+        tags: tags || {},
+        watchHistory: history || {},
         isLoading: false,
       });
       get().refilter();
@@ -106,62 +139,215 @@ const useVideoStore = create((set, get) => ({
 
   // ── Filtering + Sorting ───────────────────────────────────────────
   refilter: () => {
-    const { videos, categories, blacklist, activeTab, searchQuery, advancedSearch, sortMode, categoryTree } = get();
+    const {
+      videos,
+      categories,
+      blacklist,
+      activeTab,
+      activePlaylist,
+      activeTag,
+      durationFilter,
+      watchFilter,
+      searchQuery,
+      advancedSearch,
+      sortMode,
+      shuffleSeed,
+      watchHistory,
+      categoryTree,
+      playlists,
+      tags,
+    } = get();
+
     const { byId, childrenOf } = buildCategoryIndex(categoryTree);
     const blacklistSet = new Set(blacklist);
     const query = searchQuery.toLowerCase().trim();
+    const queryTokens = query ? query.split(/\s+/).filter(Boolean) : [];
 
     let regexObj = null;
     if (advancedSearch.regex) {
       try {
         regexObj = new RegExp(advancedSearch.regex, 'i');
-      } catch (e) {
+      } catch {
         // invalid regex, ignore
       }
     }
 
     // Selecting a parent category includes all of its descendants' videos.
-    const activeSet = activeTab !== 'none' ? getDescendantIds(activeTab, childrenOf) : null;
+    const isCategoryTab = activeTab !== 'all' && activeTab !== 'none' && activeTab !== 'recent' && activeTab !== 'blacklist';
+    const activeCatSet = isCategoryTab ? getDescendantIds(activeTab, childrenOf) : null;
+
+    // "All Videos" hides the scraped recommended/related feeds — they are still
+    // reachable from their own sidebar tabs. Includes any sub-categories of them.
+    const hiddenFromAll = new Set([
+      ...getDescendantIds('recommended', childrenOf),
+      ...getDescendantIds('related', childrenOf),
+    ]);
 
     let filtered = videos.filter((vid) => {
-      if (blacklistSet.has(vid.viewkey)) return false;
-      const rawCat = getVideoCategory(vid, categories);
-      // Dangling ids (deleted category, stale legacy value) fold into Uncategorized.
-      const cat = byId.has(rawCat) ? rawCat : 'none';
-      const matchTab = activeTab === 'none' ? cat === 'none' : activeSet.has(cat);
+      const isBlacklisted = blacklistSet.has(vid.viewkey);
 
-      let matchQuery = !query || vid.searchText.includes(query);
-      if (matchQuery && regexObj) {
-        matchQuery = regexObj.test(vid.title);
+      // Handle Blacklist tab view
+      if (activeTab === 'blacklist') {
+        if (!isBlacklisted) return false;
+      } else {
+        if (isBlacklisted) return false;
       }
 
-      const matchViews = !advancedSearch.minViews || vid.rawViews >= parseInt(advancedSearch.minViews, 10);
-      const matchDuration = !advancedSearch.minDuration || vid.rawDuration >= (parseInt(advancedSearch.minDuration, 10) * 60);
+      // Handle Tab filtering
+      if (activeTab === 'all') {
+        // All non-blacklisted included, except the recommended/related feeds.
+        if (hiddenFromAll.has(getVideoCategory(vid, categories))) return false;
+      } else if (activeTab === 'none') {
+        const rawCat = getVideoCategory(vid, categories);
+        const cat = byId.has(rawCat) ? rawCat : 'none';
+        if (cat !== 'none') return false;
+      } else if (activeTab === 'recent') {
+        const entry = watchHistory[vid.viewkey];
+        if (!entry || !entry.lastWatched) return false;
+      } else if (activeTab === 'blacklist') {
+        // Handled above
+      } else if (activeCatSet) {
+        const rawCat = getVideoCategory(vid, categories);
+        const cat = byId.has(rawCat) ? rawCat : 'none';
+        if (!activeCatSet.has(cat)) return false;
+      }
 
-      return matchTab && matchQuery && matchViews && matchDuration;
+      // Handle Playlist filter
+      if (activePlaylist) {
+        const pList = playlists[activePlaylist] || [];
+        if (!pList.includes(vid.viewkey)) return false;
+      }
+
+      // Handle Tag filter
+      if (activeTag) {
+        const vTags = tags[vid.viewkey] || [];
+        if (!vTags.includes(activeTag)) return false;
+      }
+
+      // Handle Duration filter
+      if (durationFilter !== 'all') {
+        const d = vid.rawDuration || 0;
+        if (durationFilter === 'under5' && d >= 300) return false;
+        if (durationFilter === '5to15' && (d < 300 || d >= 900)) return false;
+        if (durationFilter === '15to30' && (d < 900 || d >= 1800)) return false;
+        if (durationFilter === 'over30' && d < 1800) return false;
+      }
+
+      // Handle Watch status filter
+      if (watchFilter !== 'all') {
+        const watched = watchHistory[vid.viewkey]?.count > 0;
+        if (watchFilter === 'watched' && !watched) return false;
+        if (watchFilter === 'unwatched' && watched) return false;
+      }
+
+      // Search Query (Multi-token match)
+      if (queryTokens.length > 0) {
+        const text = vid.searchText || vid.title.toLowerCase();
+        for (const token of queryTokens) {
+          if (!text.includes(token)) return false;
+        }
+      }
+
+      // Advanced Regex
+      if (regexObj && !regexObj.test(vid.title)) {
+        return false;
+      }
+
+      // Advanced Views & Duration
+      if (advancedSearch.minViews && (vid.rawViews || 0) < parseInt(advancedSearch.minViews, 10)) {
+        return false;
+      }
+      if (advancedSearch.minDuration && (vid.rawDuration || 0) < (parseInt(advancedSearch.minDuration, 10) * 60)) {
+        return false;
+      }
+
+      return true;
     });
 
-    // Sort
+    // Sorting
     switch (sortMode) {
       case 'title-az':
         filtered.sort((a, b) => a.title.localeCompare(b.title));
         break;
       case 'views-desc':
-        filtered.sort((a, b) => b.rawViews - a.rawViews);
+        filtered.sort((a, b) => (b.rawViews || 0) - (a.rawViews || 0));
         break;
       case 'duration-desc':
-        filtered.sort((a, b) => b.rawDuration - a.rawDuration);
+        filtered.sort((a, b) => (b.rawDuration || 0) - (a.rawDuration || 0));
         break;
-      default: // 'newest' — by original scrape index (lower = newer for most recent)
-        filtered.sort((a, b) => a.idx - b.idx);
+      case 'newest':
+        filtered.sort((a, b) => (a.idx ?? 0) - (b.idx ?? 0));
+        break;
+      default: {
+        // 'random' — seeded shuffle with recently-watched deprioritization
+        if (activeTab === 'recent') {
+          filtered.sort((a, b) => {
+            const timeA = watchHistory[a.viewkey]?.lastWatched || 0;
+            const timeB = watchHistory[b.viewkey]?.lastWatched || 0;
+            return timeB - timeA;
+          });
+        } else {
+          const now = Date.now();
+          const isRecentlyWatched = (vid) => {
+            const entry = watchHistory[vid.viewkey];
+            return entry && (now - entry.lastWatched) < RECENTLY_WATCHED_MS;
+          };
+          const fresh = filtered.filter((v) => !isRecentlyWatched(v));
+          const recent = filtered.filter(isRecentlyWatched);
+          filtered = [...seededShuffle(fresh, shuffleSeed), ...seededShuffle(recent, shuffleSeed)];
+        }
+      }
     }
 
-    set({ filteredVideos: filtered });
+    set({ filteredVideos: filtered, focusedIndex: filtered.length > 0 ? 0 : -1 });
   },
 
-  // ── Tab ───────────────────────────────────────────────────────────
+  // ── Tab & Filter Actions ──────────────────────────────────────────
   setTab: (tab) => {
-    set({ activeTab: tab, selectedVideos: new Set() });
+    set({
+      activeTab: tab,
+      activePlaylist: null,
+      activeTag: null,
+      selectedVideos: new Set(),
+    });
+    get().refilter();
+  },
+
+  setActivePlaylist: (playlistName) => {
+    set((state) => ({
+      activePlaylist: state.activePlaylist === playlistName ? null : playlistName,
+      activeTag: null,
+    }));
+    get().refilter();
+  },
+
+  setActiveTag: (tagName) => {
+    set((state) => ({
+      activeTag: state.activeTag === tagName ? null : tagName,
+      activePlaylist: null,
+    }));
+    get().refilter();
+  },
+
+  setDurationFilter: (duration) => {
+    set({ durationFilter: duration });
+    get().refilter();
+  },
+
+  setWatchFilter: (watch) => {
+    set({ watchFilter: watch });
+    get().refilter();
+  },
+
+  clearAllFilters: () => {
+    set({
+      searchQuery: '',
+      activeTag: null,
+      activePlaylist: null,
+      durationFilter: 'all',
+      watchFilter: 'all',
+      advancedSearch: { minViews: '', minDuration: '', regex: '' },
+    });
     get().refilter();
   },
 
@@ -178,18 +364,49 @@ const useVideoStore = create((set, get) => ({
 
   // ── Sort ──────────────────────────────────────────────────────────
   setSortMode: (mode) => {
-    set({ sortMode: mode });
+    if (mode === 'random') {
+      set({ sortMode: mode, shuffleSeed: Date.now() });
+    } else {
+      set({ sortMode: mode });
+    }
+    get().refilter();
+  },
+
+  reshuffle: () => {
+    set({ shuffleSeed: Date.now() });
     get().refilter();
   },
 
   // ── View Mode ─────────────────────────────────────────────────────
   setViewMode: (mode) => set({ viewMode: mode }),
 
-  // ── Sidebar ───────────────────────────────────────────────────────
+  // ── Sidebar & Layout ──────────────────────────────────────────────
   toggleSidebar: () => set((s) => ({ isSidebarCollapsed: !s.isSidebarCollapsed })),
-
-  // ── Theater Mode ──────────────────────────────────────────────────
   toggleTheaterMode: () => set((s) => ({ isTheaterMode: !s.isTheaterMode })),
+
+  // ── Keyboard Navigation ───────────────────────────────────────────
+  setFocusedIndex: (idx) => set({ focusedIndex: idx }),
+
+  navigateFocus: (delta) => {
+    const { filteredVideos, focusedIndex } = get();
+    if (filteredVideos.length === 0) return;
+    const next = Math.max(0, Math.min(filteredVideos.length - 1, (focusedIndex === -1 ? 0 : focusedIndex) + delta));
+    set({ focusedIndex: next });
+  },
+
+  // ── Inspector Drawer ──────────────────────────────────────────────
+  openInspector: (video) => set({ inspectorVideo: video }),
+  closeInspector: () => set({ inspectorVideo: null }),
+
+  // ── Copy Link Helper ──────────────────────────────────────────────
+  copyVideoLink: async (video) => {
+    try {
+      await navigator.clipboard.writeText(video.url);
+      toast.success('Link copied to clipboard!');
+    } catch {
+      toast.error('Failed to copy link');
+    }
+  },
 
   // ── Categorize ────────────────────────────────────────────────────
   setCategory: (viewkey, cat) => {
@@ -203,7 +420,6 @@ const useVideoStore = create((set, get) => ({
     get().refilter();
   },
 
-  // ── Bulk categorize ───────────────────────────────────────────────
   bulkSetCategory: (cat) => {
     set((state) => {
       const next = { ...state.categories };
@@ -217,9 +433,10 @@ const useVideoStore = create((set, get) => ({
     get().refilter();
   },
 
-  // ── Blacklist ─────────────────────────────────────────────────────
+  // ── Blacklist & Restore ───────────────────────────────────────────
   deleteVideo: (viewkey) => {
     set((state) => {
+      if (state.blacklist.includes(viewkey)) return state;
       const next = [...state.blacklist, viewkey];
       debouncedSaveBlacklist(next);
       return { blacklist: next };
@@ -227,9 +444,29 @@ const useVideoStore = create((set, get) => ({
     get().refilter();
   },
 
+  restoreVideo: (viewkey) => {
+    set((state) => {
+      const next = state.blacklist.filter((vk) => vk !== viewkey);
+      debouncedSaveBlacklist(next);
+      return { blacklist: next };
+    });
+    toast.success('Video restored from blacklist');
+    get().refilter();
+  },
+
+  toggleBlacklist: (viewkey) => {
+    const { blacklist } = get();
+    if (blacklist.includes(viewkey)) {
+      get().restoreVideo(viewkey);
+    } else {
+      get().deleteVideo(viewkey);
+      toast.success('Moved to blacklist');
+    }
+  },
+
   bulkDelete: () => {
     set((state) => {
-      const next = [...state.blacklist, ...state.selectedVideos];
+      const next = Array.from(new Set([...state.blacklist, ...state.selectedVideos]));
       debouncedSaveBlacklist(next);
       return { blacklist: next, selectedVideos: new Set(), isBulkMode: false };
     });
@@ -262,7 +499,19 @@ const useVideoStore = create((set, get) => ({
   clearSelection: () => set({ selectedVideos: new Set() }),
 
   // ── Player ────────────────────────────────────────────────────────
-  playVideo: (video) => {
+  playVideo: (video, opts = {}) => {
+    const { currentVideo, categories } = get();
+
+    if (
+      !opts.force &&
+      currentVideo &&
+      currentVideo.viewkey !== video.viewkey &&
+      UNSORTED_CATEGORIES.has(getVideoCategory(currentVideo, categories))
+    ) {
+      get().openPicker({ mode: 'auto', viewkey: currentVideo.viewkey, pendingVideo: video });
+      return;
+    }
+
     set({
       currentVideo: video,
       isPlaying: true,
@@ -270,7 +519,6 @@ const useVideoStore = create((set, get) => ({
       streams: [],
       activeStreamIdx: 0,
     });
-    // Record in watch history
     get().recordWatch(video.viewkey);
   },
 
@@ -285,7 +533,6 @@ const useVideoStore = create((set, get) => ({
   setStreams: (streams, activeIdx = 0) => set({ streams, activeStreamIdx: activeIdx }),
   setActiveStream: (idx) => set({ activeStreamIdx: idx }),
 
-  // ── Play Next ─────────────────────────────────────────────────────
   playNext: () => {
     const { queue, currentVideo, filteredVideos } = get();
     if (queue.length > 0) {
@@ -294,7 +541,6 @@ const useVideoStore = create((set, get) => ({
       get().playVideo(next);
       return;
     }
-    // Find current in filtered list and play next
     if (currentVideo) {
       const idx = filteredVideos.findIndex((v) => v.viewkey === currentVideo.viewkey);
       if (idx >= 0 && idx < filteredVideos.length - 1) {
@@ -304,10 +550,13 @@ const useVideoStore = create((set, get) => ({
   },
 
   // ── Queue ─────────────────────────────────────────────────────────
-  addToQueue: (video) => set((state) => {
-    if (state.queue.some((v) => v.viewkey === video.viewkey)) return state;
-    return { queue: [...state.queue, video] };
-  }),
+  addToQueue: (video) => {
+    set((state) => {
+      if (state.queue.some((v) => v.viewkey === video.viewkey)) return state;
+      return { queue: [...state.queue, video] };
+    });
+    toast.success('Added to queue');
+  },
 
   removeFromQueue: (viewkey) => set((state) => ({
     queue: state.queue.filter((v) => v.viewkey !== viewkey),
@@ -399,23 +648,38 @@ const useVideoStore = create((set, get) => ({
     });
   },
 
-  // ── Category Counts (for sidebar badges, bottom-up aggregated) ─────
+  // ── Category Counts & Metadata ────────────────────────────────────
   getCategoryCounts: () => {
-    const { videos, categories, blacklist, categoryTree } = get();
+    const { videos, categories, blacklist, categoryTree, watchHistory } = get();
     const { byId, childrenOf } = buildCategoryIndex(categoryTree);
     const blacklistSet = new Set(blacklist);
 
+    let allCount = 0;
+    let recentCount = 0;
     const direct = { none: 0 };
     for (const n of categoryTree) direct[n.id] = 0;
+
     for (const vid of videos) {
       if (blacklistSet.has(vid.viewkey)) continue;
+      allCount++;
+
+      if (watchHistory[vid.viewkey]?.lastWatched) {
+        recentCount++;
+      }
+
       const rawCat = getVideoCategory(vid, categories);
       const cat = byId.has(rawCat) ? rawCat : 'none';
       direct[cat] = (direct[cat] || 0) + 1;
     }
 
-    // total[n] = direct[n] + sum(total[child]) — so a parent's badge includes its subtree.
-    const total = { ...direct };
+    const total = {
+      all: allCount,
+      none: direct.none || 0,
+      recent: recentCount,
+      blacklist: blacklist.length,
+      ...direct,
+    };
+
     const memo = new Set();
     const compute = (id) => {
       if (memo.has(id)) return total[id];
@@ -429,7 +693,6 @@ const useVideoStore = create((set, get) => ({
     return total;
   },
 
-  // ── Category color lookup (tree-derived, replaces static CATEGORY_COLORS) ──
   getCategoryColor: (id) => {
     const node = get().categoryTree.find((n) => n.id === id);
     return node?.color || 'transparent';
@@ -463,7 +726,6 @@ const useVideoStore = create((set, get) => ({
     });
   },
 
-  // Reparent a node. Rejects moving a node into itself or one of its own descendants.
   moveCategory: (id, newParentId) => {
     set((state) => {
       const { childrenOf } = buildCategoryIndex(state.categoryTree);
@@ -482,7 +744,6 @@ const useVideoStore = create((set, get) => ({
     get().refilter();
   },
 
-  // Recompute sortOrder for a sibling group after a drag reorder.
   reorderCategory: (id, parentId, newIndex) => {
     set((state) => {
       const moved = state.categoryTree.find((n) => n.id === id);
@@ -500,8 +761,6 @@ const useVideoStore = create((set, get) => ({
     });
   },
 
-  // Splice-delete: videos + child nodes are promoted to the deleted node's parent
-  // (or unassigned/top-level if it had none). Not a cascade delete.
   deleteCategory: (id) => {
     set((state) => {
       const target = state.categoryTree.find((n) => n.id === id);
@@ -532,7 +791,7 @@ const useVideoStore = create((set, get) => ({
     get().refilter();
   },
 
-  // ── Category picker modal target (VideoCard + TopBar both open this) ──
+  // ── Category picker modal target ──────────────────────────────────
   openPicker: (target) => set({ pickerTarget: target }),
   closePicker: () => set({ pickerTarget: null }),
 }));
