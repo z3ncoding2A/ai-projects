@@ -66,6 +66,20 @@ export async function fetchStreams(videoUrl) {
 
 // ── POST endpoints ─────────────────────────────────────────────────────
 
+/**
+ * Ask Claude to suggest a category for one or more videos by title.
+ * `items` is [{ viewkey, title }, ...]. Resolves to
+ * [{ viewkey, category_id }, ...] (no toast — callers show suggestions
+ * inline rather than treating this as a save).
+ */
+export async function suggestCategories(items) {
+  const { suggestions } = await fetchJSON(`${API_BASE}/categorize`, {
+    method: 'POST',
+    body: JSON.stringify(items),
+  });
+  return suggestions;
+}
+
 export async function saveCategories(data) {
   return fetchJSONWithToast(`${API_BASE}/categories`, {
     method: 'POST',
