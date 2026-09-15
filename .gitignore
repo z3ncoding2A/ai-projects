@@ -15,3 +15,11 @@
 .idea/
 .vscode/
 *.sublime-workspace
+.aider*
+
+# Python virtual environments and bytecode caches
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo

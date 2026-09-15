@@ -1,0 +1,90 @@
+[
+  {
+    "id": "public",
+    "name": "Public",
+    "color": "#2ecc71",
+    "icon": "🌍",
+    "parentId": null,
+    "sortOrder": 0
+  },
+  {
+    "id": "least",
+    "name": "Least Liked",
+    "color": "#7f8c9a",
+    "icon": "👎",
+    "parentId": null,
+    "sortOrder": 2
+  },
+  {
+    "id": "most",
+    "name": "HOT",
+    "color": "#f59e0b",
+    "icon": "🔥",
+    "parentId": null,
+    "sortOrder": 4
+  },
+  {
+    "id": "explode",
+    "name": "EXPLODE!!!",
+    "color": "#ff2d78",
+    "icon": "💥",
+    "parentId": "0dd22c4b63d7b9bd2d546af98b285b34",
+    "sortOrder": 0
+  },
+  {
+    "id": "related",
+    "name": "Related",
+    "color": "#06b6d4",
+    "icon": "🔗",
+    "parentId": "recommended",
+    "sortOrder": 0
+  },
+  {
+    "id": "recommended",
+    "name": "Recommended",
+    "color": "#f97316",
+    "icon": "⭐",
+    "parentId": null,
+    "sortOrder": 7
+  },
+  {
+    "id": "0dd22c4b63d7b9bd2d546af98b285b34",
+    "name": "Average",
+    "color": "#5ff771",
+    "icon": null,
+    "parentId": null,
+    "sortOrder": 6
+  },
+  {
+    "id": "09701ab47fe722d50e5d4adcbb8c02fe",
+    "name": "Movies",
+    "color": "#eab308",
+    "icon": null,
+    "parentId": null,
+    "sortOrder": 7
+  },
+  {
+    "id": "4dc5700754e2a2e8ffad9855e63f758b",
+    "name": "Shorts",
+    "color": "#ec4899",
+    "icon": null,
+    "parentId": null,
+    "sortOrder": 8
+  },
+  {
+    "id": "9cf46a1d4a1b98ba3bcb02d5db245513",
+    "name": "Cumshots",
+    "color": "#08d8e7",
+    "icon": null,
+    "parentId": null,
+    "sortOrder": 9
+  },
+  {
+    "id": "8512ac5fdbc3f965ee63590cce1db733",
+    "name": "temp",
+    "color": "#e11d48",
+    "icon": null,
+    "parentId": null,
+    "sortOrder": 9
+  }
+]
