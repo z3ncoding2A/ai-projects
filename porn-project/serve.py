@@ -370,8 +370,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return f.read()
 
     def _write_json_file(self, path, data):
-        with open(path, "w", encoding="utf-8") as f:
+        tmp_path = f"{path}.tmp"
+        with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
+        os.replace(tmp_path, path)
 
     def _write_text_file(self, path, text):
         with open(path, "w", encoding="utf-8") as f:

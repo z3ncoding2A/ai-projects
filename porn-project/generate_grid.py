@@ -18,6 +18,13 @@ THUMBS_DIR = "thumbs"
 if not os.path.exists(THUMBS_DIR):
     os.makedirs(THUMBS_DIR)
 
+def atomic_json_dump(data, path, **json_kwargs):
+    """Write JSON via a temp file + os.replace so readers never see a partial file."""
+    tmp_path = f"{path}.tmp"
+    with open(tmp_path, "w", encoding="UTF-8") as f:
+        json.dump(data, f, **json_kwargs)
+    os.replace(tmp_path, path)
+
 # Headers to avoid being blocked
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
@@ -481,8 +488,7 @@ def write_html_grid(all_videos, filename, saved_categories):
         })
 
     videos_json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "videos.json")
-    with open(videos_json_path, "w", encoding="UTF-8") as f:
-        json.dump(react_videos, f, indent=2, ensure_ascii=False)
+    atomic_json_dump(react_videos, videos_json_path, indent=2, ensure_ascii=False)
 
 def main():
     import sys
@@ -598,8 +604,7 @@ def main():
     # Save updated categories back to file
     if new_related or new_recommended:
         print(f"\nSaving updated categories.json with {len(new_related)} related + {len(new_recommended)} recommended...")
-        with open(CATEGORIES_FILE, "w") as f:
-            json.dump(saved_categories, f, indent=2)
+        atomic_json_dump(saved_categories, CATEGORIES_FILE, indent=2)
 
     output_file = "z3ncoding_videos_grid.html"
     write_html_grid(all_videos, output_file, saved_categories)
