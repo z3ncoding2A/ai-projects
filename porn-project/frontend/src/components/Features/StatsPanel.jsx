@@ -3,18 +3,20 @@ import useVideoStore from '../../stores/useVideoStore';
 import { getVideoCategory, formatDuration } from '../../utils/formatters';
 
 /** Shared renderer for the category-breakdown-style bar lists (count / duration / watch time). */
-function CategoryBarList({ entries, formatValue }) {
+function CategoryBarList({ entries, formatValue, catById }) {
   const total = entries.reduce((sum, [, v]) => sum + v, 0);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
       {entries.map(([cat, value]) => {
         const pct = total > 0 ? (value / total) * 100 : 0;
-        const color = CATEGORY_COLORS[cat] || 'var(--text-muted)';
+        const node = catById.get(cat);
+        const color = node?.color || 'var(--text-muted)';
+        const label = cat === 'none' ? 'Uncategorized' : (node?.name || cat);
         return (
           <div key={cat} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ width: 10, height: 10, borderRadius: '50%', background: color, flexShrink: 0 }} />
             <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', width: 100 }}>
-              {CATEGORY_LABELS[cat] || cat}
+              {label}
             </span>
             <div style={{ flex: 1, height: 6, background: 'var(--bg-surface)', borderRadius: 3, overflow: 'hidden' }}>
               <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 3, transition: 'width 0.5s ease' }} />
@@ -158,6 +160,7 @@ export default function StatsPanel({ onClose }) {
         <CategoryBarList
           entries={catEntries}
           formatValue={(v) => `${v} (${stats.activeCount > 0 ? ((v / stats.activeCount) * 100).toFixed(1) : '0'}%)`}
+          catById={catById}
         />
 
         {/* Duration by category */}
@@ -166,7 +169,7 @@ export default function StatsPanel({ onClose }) {
             <h3 style={{ fontSize: '0.9rem', marginBottom: 12, color: 'var(--text-secondary)' }}>
               Duration by Category
             </h3>
-            <CategoryBarList entries={durationEntries} formatValue={formatDuration} />
+            <CategoryBarList entries={durationEntries} formatValue={formatDuration} catById={catById} />
           </>
         )}
 
@@ -179,7 +182,7 @@ export default function StatsPanel({ onClose }) {
             <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: 12 }}>
               Estimated from play count × runtime — not exact watch duration.
             </p>
-            <CategoryBarList entries={watchTimeEntries} formatValue={formatDuration} />
+            <CategoryBarList entries={watchTimeEntries} formatValue={formatDuration} catById={catById} />
           </>
         )}
 
