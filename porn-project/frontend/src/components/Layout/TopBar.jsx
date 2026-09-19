@@ -1,4 +1,5 @@
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useState, useEffect } from 'react';
+import toast from 'react-hot-toast';
 import useVideoStore from '../../stores/useVideoStore';
 
 export default function TopBar() {
@@ -18,22 +19,85 @@ export default function TopBar() {
   const filteredCount = useVideoStore((s) => s.filteredVideos.length);
   const totalCount = useVideoStore((s) => s.videos.length);
   const reshuffle = useVideoStore((s) => s.reshuffle);
+  const exportBackup = useVideoStore((s) => s.exportBackup);
+  const importBackup = useVideoStore((s) => s.importBackup);
+  const activePlaylist = useVideoStore((s) => s.activePlaylist);
+  const activeTag = useVideoStore((s) => s.activeTag);
+  const filteredVideos = useVideoStore((s) => s.filteredVideos);
+  const playAll = useVideoStore((s) => s.playAll);
+  const shufflePlay = useVideoStore((s) => s.shufflePlay);
 
   const searchRef = useRef(null);
   const debounceRef = useRef(null);
+  const importInputRef = useRef(null);
+  const moreMenuRef = useRef(null);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+
+  // The search box needs to be a controlled input (not defaultValue) so that
+  // applying a saved filter preset — which sets searchQuery in the store from
+  // outside this component — is reflected in the visible text. lastSentRef
+  // distinguishes "the store changed because we just typed" (already in sync,
+  // don't fight the debounce) from "the store changed some other way"
+  // (a preset was applied — pull the new value in).
+  const [localQuery, setLocalQuery] = useState(searchQuery);
+  const lastSentRef = useRef(searchQuery);
+
+  useEffect(() => {
+    if (searchQuery !== lastSentRef.current) {
+      // An external change (e.g. applying a saved preset) landed. Cancel any
+      // in-flight typing debounce — otherwise it still holds whatever the
+      // user typed *before* the preset was applied, and would fire ~200ms
+      // later and silently overwrite the preset's query back to the stale one.
+      clearTimeout(debounceRef.current);
+      setLocalQuery(searchQuery);
+      lastSentRef.current = searchQuery;
+    }
+  }, [searchQuery]);
+
+  // Close the overflow menu on any outside click
+  useEffect(() => {
+    if (!showMoreMenu) return;
+    const onClick = (e) => {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target)) {
+        setShowMoreMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [showMoreMenu]);
+
+  const handleImportFile = useCallback((e) => {
+    const file = e.target.files[0];
+    e.target.value = ''; // allow re-selecting the same file later
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        await importBackup(evt.target.result);
+        toast.success('Backup imported');
+      } catch (err) {
+        toast.error(err.message || 'Invalid backup file');
+      }
+    };
+    reader.readAsText(file);
+  }, [importBackup]);
 
   const handleSearch = useCallback((e) => {
     const val = e.target.value;
+    setLocalQuery(val);
     clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => setSearchQuery(val), 150);
+    debounceRef.current = setTimeout(() => {
+      lastSentRef.current = val;
+      setSearchQuery(val);
+    }, 200);
   }, [setSearchQuery]);
 
   const handleClearSearch = useCallback(() => {
-    if (searchRef.current) {
-      searchRef.current.value = '';
-      searchRef.current.focus();
-    }
+    clearTimeout(debounceRef.current);
+    setLocalQuery('');
+    lastSentRef.current = '';
     setSearchQuery('');
+    searchRef.current?.focus();
   }, [setSearchQuery]);
 
   return (
@@ -46,7 +110,7 @@ export default function TopBar() {
           className="search-input"
           type="text"
           placeholder="Omni-search titles, tags... (Press /)"
-          defaultValue={searchQuery}
+          value={localQuery}
           onChange={handleSearch}
           autoComplete="off"
           spellCheck="false"
@@ -71,6 +135,7 @@ export default function TopBar() {
           >
             <option value="random">🔀 Randomize</option>
             <option value="newest">🆕 Recently Scraped</option>
+            <option value="date-added-desc">🗓 Date Added</option>
             <option value="title-az">🔤 Title A-Z</option>
             <option value="views-desc">👁 Most Viewed</option>
             <option value="duration-desc">⏱ Longest Duration</option>
@@ -113,6 +178,28 @@ export default function TopBar() {
             ☰
           </button>
         </div>
+
+        <div className="topbar-divider" />
+
+        {(activePlaylist || activeTag) && filteredVideos.length > 0 && (
+          <button
+            className="topbar-btn"
+            onClick={() => playAll(filteredVideos)}
+            title={`Play all ${filteredVideos.length} videos, starting now`}
+          >
+            ▶ Play All
+          </button>
+        )}
+
+        {filteredVideos.length > 0 && (
+          <button
+            className="topbar-btn"
+            onClick={() => shufflePlay()}
+            title={`Shuffle-play up to 20 random videos from the current ${filteredVideos.length.toLocaleString()}`}
+          >
+            🔀 Shuffle
+          </button>
+        )}
 
         <div className="topbar-divider" />
 
@@ -160,6 +247,35 @@ export default function TopBar() {
             <button className="topbar-btn-mini" onClick={clearSelection}>None</button>
           </div>
         )}
+
+        <div className="topbar-more" ref={moreMenuRef} style={{ position: 'relative' }}>
+          <button className="topbar-btn" onClick={() => setShowMoreMenu((v) => !v)} title="More">
+            ⋯
+          </button>
+          {showMoreMenu && (
+            <div className="topbar-more-menu">
+              <button
+                className="topbar-more-item"
+                onClick={() => { exportBackup(); setShowMoreMenu(false); }}
+              >
+                📤 Export Backup
+              </button>
+              <button
+                className="topbar-more-item"
+                onClick={() => { importInputRef.current?.click(); setShowMoreMenu(false); }}
+              >
+                📥 Import Backup
+              </button>
+            </div>
+          )}
+        </div>
+        <input
+          ref={importInputRef}
+          type="file"
+          accept="application/json"
+          style={{ display: 'none' }}
+          onChange={handleImportFile}
+        />
 
         <div className="topbar-divider" />
 

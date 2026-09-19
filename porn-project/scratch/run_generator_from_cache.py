@@ -1,9 +1,16 @@
+# OBSOLETE (2026-08-03): this script's sole purpose was rebuilding
+# z3ncoding_videos_grid.html by parsing its own embedded ALL_VIDEOS array back
+# out — a recovery path for the legacy single-file template, which has been
+# retired in favor of the React frontend (frontend/dist/, served by serve.py).
+# generate_grid.write_html_grid no longer exists (renamed to write_videos_data,
+# which only writes videos.json — there's no HTML to regenerate anymore).
+# Left in place for reference; not expected to run. See plans/improvements_audit.md.
 import json
 import sys
 import os
 
 sys.path.append("/home/z3ncoding123/.antigravity/projects/porn-project")
-from generate_grid import write_html_grid, CATEGORIES_FILE
+from generate_grid import write_html_grid, CATEGORIES_FILE  # noqa: this import will fail — see note above
 
 html_path = "z3ncoding_videos_grid.html"
 

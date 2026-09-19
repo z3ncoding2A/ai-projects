@@ -74,6 +74,10 @@ export async function refreshThumbnail(viewkey) {
   return remoteThumbnail || '';
 }
 
+export async function fetchFilterPresets() {
+  return fetchJSON(`${API_BASE}/filter_presets`);
+}
+
 // ── POST endpoints ─────────────────────────────────────────────────────
 
 /**
@@ -131,4 +135,11 @@ export async function saveHistory(data) {
     method: 'POST',
     body: JSON.stringify(data),
   });
+}
+
+export async function saveFilterPresets(data) {
+  return fetchJSONWithToast(`${API_BASE}/filter_presets`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }, 'Saved search updated');
 }

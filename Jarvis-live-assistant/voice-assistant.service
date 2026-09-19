@@ -1,0 +1,32 @@
+# systemd USER unit — managed copy at ~/.config/systemd/user/voice-assistant.service
+# Enable/start:  systemctl --user enable --now voice-assistant
+# Restart:       systemctl --user restart voice-assistant
+# Logs:          journalctl --user -u voice-assistant -f
+[Unit]
+Description=Stark Industries JARVIS Assistant - MARK XLVI (Gemini Live API)
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/ai-projects/Jarvis-live-assistant
+ExecStart=%h/ai-projects/Jarvis-live-assistant/.venv/bin/python main.py
+Restart=on-failure
+RestartSec=5
+
+# Load API keys and other secrets from the project .env file.
+# This ensures the service always has the Gemini key regardless of whether
+# the login session exports it to the systemd user bus.
+EnvironmentFile=-%h/ai-projects/Jarvis-live-assistant/.env
+
+Environment="PYTHONUNBUFFERED=1"
+Environment="LD_LIBRARY_PATH=/opt/cuda/lib64:/usr/local/lib/ollama/cuda_v12:/usr/lib64:/usr/lib"
+
+# WAYLAND_DISPLAY and XDG_RUNTIME_DIR are normally inherited when Hyprland runs:
+#   systemctl --user import-environment WAYLAND_DISPLAY XDG_RUNTIME_DIR
+# Uncomment + adjust if the compositor vars are not propagated to the service:
+# Environment="WAYLAND_DISPLAY=wayland-1"
+# Environment="XDG_RUNTIME_DIR=/run/user/1000"
+
+[Install]
+WantedBy=graphical-session.target

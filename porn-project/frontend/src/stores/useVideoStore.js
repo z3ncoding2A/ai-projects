@@ -10,13 +10,31 @@ import {
   UNSORTED_CATEGORIES,
 } from '../utils/formatters';
 
-/** Debounce helper */
+/**
+ * Debounce helper. Exposes `.flush()` so a pending call can be forced through
+ * immediately (used on tab close/hide — see the flushAllPendingSaves() below,
+ * added after review found that closing the tab within the debounce window
+ * silently dropped the last edit).
+ */
 function debounce(fn, ms) {
   let timer;
-  return (...args) => {
+  let pending = null; // last args passed while a call is pending
+  const wrapped = (...args) => {
     clearTimeout(timer);
-    timer = setTimeout(() => fn(...args), ms);
+    pending = args;
+    timer = setTimeout(() => {
+      pending = null;
+      fn(...args);
+    }, ms);
   };
+  wrapped.flush = () => {
+    if (pending === null) return;
+    clearTimeout(timer);
+    const args = pending;
+    pending = null;
+    fn(...args);
+  };
+  return wrapped;
 }
 
 /** Mulberry32 seeded PRNG — deterministic shuffle that stays stable across re-filters. */
@@ -51,6 +69,25 @@ const debouncedSaveBlacklist = debounce((data) => api.saveBlacklist(data).catch(
 const debouncedSavePlaylists = debounce((data) => api.savePlaylists(data).catch(console.error), 400);
 const debouncedSaveTags = debounce((data) => api.saveTags(data).catch(console.error), 400);
 const debouncedSaveHistory = debounce((data) => api.saveHistory(data).catch(console.error), 400);
+const debouncedSaveFilterPresets = debounce((data) => api.saveFilterPresets(data).catch(console.error), 400);
+
+// Flush every debounced save immediately — best-effort insurance against the
+// tab closing/hiding inside the ~400ms debounce window. Registered once,
+// below, on 'pagehide' and 'visibilitychange'.
+function flushAllPendingSaves() {
+  debouncedSaveCategories.flush();
+  debouncedSaveBlacklist.flush();
+  debouncedSavePlaylists.flush();
+  debouncedSaveTags.flush();
+  debouncedSaveHistory.flush();
+  debouncedSaveFilterPresets.flush();
+}
+if (typeof window !== 'undefined') {
+  window.addEventListener('pagehide', flushAllPendingSaves);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushAllPendingSaves();
+  });
+}
 
 const useVideoStore = create((set, get) => ({
   // ── Data ──────────────────────────────────────────────────────────
@@ -61,6 +98,7 @@ const useVideoStore = create((set, get) => ({
   playlists: {},
   tags: {},
   watchHistory: {},
+  filterPresets: {}, // name -> { searchQuery, minViews, minDuration, regex }
   isLoading: true,
   error: null,
 
@@ -94,6 +132,10 @@ const useVideoStore = create((set, get) => ({
   playerMode: 'idle',        // 'idle' | 'native' | 'iframe'
   streams: [],
   activeStreamIdx: 0,
+  // Bumped on every playVideo, including re-selecting the video that's
+  // already playing. The PlayerPanel load effect keys on this so a re-click
+  // genuinely retries loading instead of resetting to a blank idle player.
+  loadNonce: 0,
 
   // ── Derived: filtered + sorted videos ─────────────────────────────
   filteredVideos: [],
@@ -102,7 +144,7 @@ const useVideoStore = create((set, get) => ({
   init: async () => {
     set({ isLoading: true, error: null });
     try {
-      const [videos, categories, categoryTree, blacklist, playlists, tags, history] = await Promise.all([
+      const [videos, categories, categoryTree, blacklist, playlists, tags, history, filterPresets] = await Promise.all([
         api.fetchVideos(),
         api.fetchCategories(),
         api.fetchCategorySchema().catch(() => []),
@@ -110,6 +152,7 @@ const useVideoStore = create((set, get) => ({
         api.fetchPlaylists().catch(() => ({})),
         api.fetchTags().catch(() => ({})),
         api.fetchHistory().catch(() => ({})),
+        api.fetchFilterPresets().catch(() => ({})),
       ]);
 
       // Auto-seed the tree on first load so categories-schema.json gets created
@@ -128,6 +171,7 @@ const useVideoStore = create((set, get) => ({
         playlists: playlists || {},
         tags: tags || {},
         watchHistory: history || {},
+        filterPresets: filterPresets || {},
         isLoading: false,
       });
       get().refilter();
@@ -278,6 +322,10 @@ const useVideoStore = create((set, get) => ({
       case 'newest':
         filtered.sort((a, b) => (a.idx ?? 0) - (b.idx ?? 0));
         break;
+      case 'date-added-desc':
+        // Falls back to scrape idx for videos without a firstSeen date (pre-migration data)
+        filtered.sort((a, b) => (b.firstSeen || '').localeCompare(a.firstSeen || '') || b.idx - a.idx);
+        break;
       default: {
         // 'random' — seeded shuffle with recently-watched deprioritization
         if (activeTab === 'recent') {
@@ -317,6 +365,7 @@ const useVideoStore = create((set, get) => ({
     set((state) => ({
       activePlaylist: state.activePlaylist === playlistName ? null : playlistName,
       activeTag: null,
+      selectedVideos: new Set(),
     }));
     get().refilter();
   },
@@ -325,6 +374,7 @@ const useVideoStore = create((set, get) => ({
     set((state) => ({
       activeTag: state.activeTag === tagName ? null : tagName,
       activePlaylist: null,
+      selectedVideos: new Set(),
     }));
     get().refilter();
   },
@@ -360,6 +410,36 @@ const useVideoStore = create((set, get) => ({
   setAdvancedSearch: (filters) => {
     set((state) => ({ advancedSearch: { ...state.advancedSearch, ...filters } }));
     get().refilter();
+  },
+
+  // ── Saved Filter Presets ─────────────────────────────────────────────
+  // Bundles searchQuery + advancedSearch into a named, persisted preset so a
+  // useful combination (e.g. a regex + min-views filter) doesn't have to be
+  // re-entered after every reload.
+  saveFilterPreset: (name) => {
+    const { searchQuery, advancedSearch } = get();
+    set((state) => {
+      const next = { ...state.filterPresets, [name]: { searchQuery, ...advancedSearch } };
+      debouncedSaveFilterPresets(next);
+      return { filterPresets: next };
+    });
+  },
+
+  applyFilterPreset: (name) => {
+    const preset = get().filterPresets[name];
+    if (!preset) return;
+    const { searchQuery = '', ...advancedSearch } = preset;
+    set({ searchQuery, advancedSearch: { minViews: '', minDuration: '', regex: '', ...advancedSearch } });
+    get().refilter();
+  },
+
+  deleteFilterPreset: (name) => {
+    set((state) => {
+      const next = { ...state.filterPresets };
+      delete next[name];
+      debouncedSaveFilterPresets(next);
+      return { filterPresets: next };
+    });
   },
 
   // ── Sort ──────────────────────────────────────────────────────────
@@ -444,6 +524,7 @@ const useVideoStore = create((set, get) => ({
     get().refilter();
   },
 
+  // Un-blacklist a single video.
   restoreVideo: (viewkey) => {
     set((state) => {
       const next = state.blacklist.filter((vk) => vk !== viewkey);
@@ -480,6 +561,17 @@ const useVideoStore = create((set, get) => ({
       const next = Array.from(new Set([...state.blacklist, ...state.selectedVideos]));
       debouncedSaveBlacklist(next);
       return { blacklist: next, selectedVideos: new Set(), isBulkMode: false };
+    });
+    get().refilter();
+  },
+
+  // Blacklist an arbitrary list of viewkeys in one shot (one save instead of
+  // N) — used by the duplicate-detection review flow.
+  blacklistMany: (viewkeys) => {
+    set((state) => {
+      const next = Array.from(new Set([...state.blacklist, ...viewkeys]));
+      debouncedSaveBlacklist(next);
+      return { blacklist: next };
     });
     get().refilter();
   },
@@ -523,13 +615,14 @@ const useVideoStore = create((set, get) => ({
       return;
     }
 
-    set({
+    set((state) => ({
       currentVideo: video,
       isPlaying: true,
       playerMode: 'idle',
       streams: [],
       activeStreamIdx: 0,
-    });
+      loadNonce: state.loadNonce + 1,
+    }));
     get().recordWatch(video.viewkey);
   },
 
@@ -569,6 +662,30 @@ const useVideoStore = create((set, get) => ({
     toast.success('Added to queue');
   },
 
+  // Plays the first video in a list immediately and queues the rest —
+  // used for "Play All" on a playlist/tag/tab's currently filtered videos.
+  playAll: (videoList) => {
+    if (videoList.length === 0) return;
+    const [first, ...rest] = videoList;
+    get().playVideo(first);
+    set({ queue: rest });
+  },
+
+  // Shuffle/radio mode: picks `count` random videos from whatever's currently
+  // filtered (respects the active tab/playlist/tag/search/advanced-search
+  // scope) and plays them via playAll. Fisher-Yates on a copy — never
+  // mutates filteredVideos itself.
+  shufflePlay: (count = 20) => {
+    const list = get().filteredVideos;
+    if (list.length === 0) return;
+    const shuffled = [...list];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    get().playAll(shuffled.slice(0, count));
+  },
+
   removeFromQueue: (viewkey) => set((state) => ({
     queue: state.queue.filter((v) => v.viewkey !== viewkey),
   })),
@@ -591,10 +708,24 @@ const useVideoStore = create((set, get) => ({
       const next = {
         ...state.watchHistory,
         [viewkey]: {
+          ...prev, // preserve lastPosition across replays — starting a video
+                    // you've already resumed shouldn't wipe the saved spot
           lastWatched: Date.now(),
           count: (prev.count || 0) + 1,
         },
       };
+      debouncedSaveHistory(next);
+      return { watchHistory: next };
+    });
+  },
+
+  // Called periodically (throttled) while the native player plays, and once
+  // more on pause/unmount, so playback can resume near where it left off.
+  updatePlaybackPosition: (viewkey, seconds) => {
+    set((state) => {
+      const prev = state.watchHistory[viewkey];
+      if (!prev) return state; // only track position for videos already in history
+      const next = { ...state.watchHistory, [viewkey]: { ...prev, lastPosition: seconds } };
       debouncedSaveHistory(next);
       return { watchHistory: next };
     });
@@ -657,6 +788,81 @@ const useVideoStore = create((set, get) => ({
       debouncedSaveTags(next);
       return { tags: next };
     });
+  },
+
+  // ── Backup Export / Import ──────────────────────────────────────────
+  // Bundles everything a user might have manually curated (categories, tags,
+  // playlists, watch history, blacklist) into one downloadable JSON file.
+  exportBackup: () => {
+    const { categories, tags, playlists, watchHistory, blacklist } = get();
+    const backup = {
+      exportedAt: new Date().toISOString(),
+      categories,
+      tags,
+      playlists,
+      history: watchHistory,
+      blacklist,
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `z3ncoding_backup_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  },
+
+  // Restores from a previously exported backup. Merges into current state
+  // rather than overwriting it — an older backup shouldn't be able to erase
+  // categorization, tags, playlists, or watch progress made since it was
+  // taken. Current values win on conflicts for categories/tags/playlists
+  // (existing entries are assumed intentional and newer); watchHistory picks
+  // whichever side has the more recent lastWatched per video, since count
+  // and resume position should only move forward.
+  importBackup: async (fileText) => {
+    let backup;
+    try {
+      backup = JSON.parse(fileText);
+    } catch (e) {
+      throw new Error('Invalid backup file: not valid JSON');
+    }
+
+    const state = get();
+    const updates = {};
+
+    if (backup.categories && typeof backup.categories === 'object') {
+      updates.categories = { ...backup.categories, ...state.categories };
+      debouncedSaveCategories(updates.categories);
+    }
+    if (backup.tags && typeof backup.tags === 'object') {
+      updates.tags = { ...backup.tags, ...state.tags };
+      debouncedSaveTags(updates.tags);
+    }
+    if (backup.playlists && typeof backup.playlists === 'object') {
+      updates.playlists = { ...backup.playlists, ...state.playlists };
+      debouncedSavePlaylists(updates.playlists);
+    }
+    if (backup.history && typeof backup.history === 'object') {
+      const merged = { ...backup.history };
+      for (const [viewkey, currentEntry] of Object.entries(state.watchHistory)) {
+        const backupEntry = merged[viewkey];
+        if (!backupEntry || (currentEntry.lastWatched || 0) >= (backupEntry.lastWatched || 0)) {
+          merged[viewkey] = currentEntry;
+        }
+      }
+      updates.watchHistory = merged;
+      debouncedSaveHistory(merged);
+    }
+    if (Array.isArray(backup.blacklist)) {
+      // Merge rather than overwrite blacklist — restoring an older backup
+      // shouldn't un-delete videos blacklisted since that backup was made.
+      const merged = Array.from(new Set([...state.blacklist, ...backup.blacklist]));
+      updates.blacklist = merged;
+      debouncedSaveBlacklist(merged);
+    }
+
+    set(updates);
+    get().refilter();
   },
 
   // ── Category Counts & Metadata ────────────────────────────────────

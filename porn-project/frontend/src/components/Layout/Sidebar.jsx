@@ -205,7 +205,7 @@ export default function Sidebar() {
                 key={name}
                 className={`sidebar-item${activePlaylist === name ? ' active' : ''}`}
                 onClick={() => setActivePlaylist(name)}
-                title={`${items.length} videos`}
+                title={`${items.length} videos — click to browse, click again to exit`}
               >
                 <span className="sidebar-item-icon">🎵</span>
                 <span className="sidebar-item-label">{name}</span>
@@ -257,6 +257,28 @@ export default function Sidebar() {
           >
             <span className="sidebar-item-icon">📊</span>
             <span className="sidebar-item-label">Analytics & Stats</span>
+          </div>
+
+          <div
+            className="sidebar-item"
+            onClick={() => {
+              const el = document.getElementById('blacklist-trigger');
+              if (el) el.click();
+            }}
+          >
+            <span className="sidebar-item-icon">🚫</span>
+            <span className="sidebar-item-label">Blacklist</span>
+          </div>
+
+          <div
+            className="sidebar-item"
+            onClick={() => {
+              const el = document.getElementById('duplicates-trigger');
+              if (el) el.click();
+            }}
+          >
+            <span className="sidebar-item-icon">🧬</span>
+            <span className="sidebar-item-label">Find Duplicates</span>
           </div>
         </div>
       )}

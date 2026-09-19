@@ -11,6 +11,8 @@ import StatsPanel from './components/Features/StatsPanel';
 import AdvancedSearchModal from './components/Features/AdvancedSearchModal';
 import CategoryPickerModal from './components/Features/CategoryPickerModal';
 import InspectorDrawer from './components/Features/InspectorDrawer';
+import BlacklistModal from './components/Features/BlacklistModal';
+import DuplicatesModal from './components/Features/DuplicatesModal';
 
 export default function App() {
   const init = useVideoStore((s) => s.init);
@@ -21,6 +23,8 @@ export default function App() {
 
   const [showStats, setShowStats] = useState(false);
   const [showAdvancedSearch, setShowAdvancedSearch] = useState(false);
+  const [showBlacklist, setShowBlacklist] = useState(false);
+  const [showDuplicates, setShowDuplicates] = useState(false);
   const [playerWidth, setPlayerWidth] = useState(50); // percentage
   const resizerRef = useRef(null);
   const isResizing = useRef(false);
@@ -137,11 +141,23 @@ export default function App() {
         style={{ display: 'none' }}
         onClick={() => setShowAdvancedSearch(true)}
       />
+      <button
+        id="blacklist-trigger"
+        style={{ display: 'none' }}
+        onClick={() => setShowBlacklist(true)}
+      />
+      <button
+        id="duplicates-trigger"
+        style={{ display: 'none' }}
+        onClick={() => setShowDuplicates(true)}
+      />
 
       {/* Modals */}
       {showStats && <StatsPanel onClose={() => setShowStats(false)} />}
       {showAdvancedSearch && <AdvancedSearchModal onClose={() => setShowAdvancedSearch(false)} />}
       <CategoryPickerModal />
+      {showBlacklist && <BlacklistModal onClose={() => setShowBlacklist(false)} />}
+      {showDuplicates && <DuplicatesModal onClose={() => setShowDuplicates(false)} />}
     </div>
   );
 }

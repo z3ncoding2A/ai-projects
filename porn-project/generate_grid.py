@@ -4,6 +4,7 @@ import time
 import os
 import re
 import json
+import datetime
 from xml.sax.saxutils import escape
 import yt_dlp
 from concurrent.futures import ThreadPoolExecutor
@@ -14,6 +15,34 @@ PROFILE_VIDEOS_URL = "https://www.pornhub.com/users/z3ncoding/videos/recent"
 CATEGORIES_FILE = "categories.json"
 MANUAL_VIDEOS_FILE = "manual_videos.json"
 THUMBS_DIR = "thumbs"
+# Persistent viewkey -> ISO date first observed. Only ever appended to — never
+# regenerated wholesale — since "date added" can't be reconstructed after the fact.
+FIRST_SEEN_FILE = "first_seen.json"
+
+
+def load_first_seen():
+    if os.path.exists(FIRST_SEEN_FILE):
+        try:
+            with open(FIRST_SEEN_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"Error loading {FIRST_SEEN_FILE}: {e}")
+    return {}
+
+
+def update_first_seen(first_seen, all_videos):
+    """Add today's date for any viewkey not already tracked. Returns True if changed."""
+    today = datetime.date.today().isoformat()
+    changed = False
+    for vid in all_videos:
+        vk = vid.get("viewkey")
+        if vk and vk not in first_seen:
+            first_seen[vk] = today
+            changed = True
+    if changed:
+        with open(FIRST_SEEN_FILE, "w", encoding="utf-8") as f:
+            json.dump(first_seen, f, indent=2, ensure_ascii=False)
+    return changed
 
 if not os.path.exists(THUMBS_DIR):
     os.makedirs(THUMBS_DIR)
@@ -421,23 +450,33 @@ def scrape_related_and_recommended(saved_categories, all_videos, seen_viewkeys):
     
     return new_related, new_recommended
 
-def write_html_grid(all_videos, filename, saved_categories):
-    print(f"Generating optimized HTML grid: {filename}...")
+def write_videos_data(all_videos, saved_categories, first_seen=None):
+    """
+    Writes videos.json for the React frontend (frontend/dist/, served by serve.py).
+    Used to also generate a self-contained z3ncoding_videos_grid.html from
+    z3ncoding_videos_grid.template.html; that legacy path was removed once the
+    React rewrite reached feature parity (folder sync, backup export/import,
+    blacklist management, tag/playlist browsing) — see plans/improvements_audit.md.
+    The old template/HTML files may still be sitting in the repo; they're inert
+    now and safe to delete manually.
+    """
+    print("Generating videos.json...")
     import json
-    
+    first_seen = first_seen or {}
+
     # Prepare JSON data for embedding
     json_videos = []
     for idx, vid in enumerate(all_videos):
         viewkey = vid['viewkey']
         category = saved_categories.get(viewkey, "none")
-        
+
         # Auto-categorize based on keywords
         if category == "none":
             title_lower = vid['title'].lower()
             public_keywords = ["public", "exhibition", "watched", "being watched"]
             if any(kw in title_lower for kw in public_keywords):
                 category = "public"
-        
+
         remote_thumb = vid.get('remote_thumbnail', '')
         if not remote_thumb and vid['thumbnail'].startswith('http'):
             remote_thumb = vid['thumbnail']
@@ -454,20 +493,32 @@ def write_html_grid(all_videos, filename, saved_categories):
             viewkey,
             category,
             vid['title'].lower(),
-            remote_thumb # Index 11
+            remote_thumb, # Index 11
+            first_seen.get(viewkey, "") # Index 12
         ])
 
-    # Read template from file
-    template_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "z3ncoding_videos_grid.template.html")
-    with open(template_path, "r", encoding="utf-8") as f:
-        html_template = f.read()
+    # Save the videos to videos.json for the React UI (as objects, not arrays)
+    react_videos = []
+    for item in json_videos:
+        react_videos.append({
+            "idx": item[0],
+            "title": item[1],
+            "url": item[2],
+            "thumbnail": item[3],
+            "duration": item[4],
+            "rawDuration": item[5],
+            "views": item[6],
+            "rawViews": item[7],
+            "viewkey": item[8],
+            "category": item[9],
+            "searchText": item[10],
+            "remoteThumbnail": item[11],
+            "firstSeen": item[12]
+        })
 
-    # Replace placeholders
-    html_content = html_template.replace("__TOTAL_VIDEOS_COUNT__", str(len(all_videos)))
-    html_content = html_content.replace("__VIDEOS_JSON_DATA__", json.dumps(json_videos, ensure_ascii=False))
-
-    with open(filename, "w", encoding="UTF-8") as f:
-        f.write(html_content)
+    videos_json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "videos.json")
+    with open(videos_json_path, "w", encoding="UTF-8") as f:
+        json.dump(react_videos, f, indent=2, ensure_ascii=False)
 
     # Also save the videos to videos.json for the modern React UI (as objects, not arrays)
     react_videos = []
@@ -502,36 +553,6 @@ def main():
             print(f"Found {len(saved_categories)} categorized videos.")
         except Exception as e:
             print(f"Error loading categories: {e}")
-
-    # If --from-json passed, regenerate z3ncoding_videos_grid.html directly from videos.json
-    if "--from-json" in sys.argv:
-        videos_json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "videos.json")
-        if os.path.exists(videos_json_path):
-            print("Regenerating HTML grid directly from videos.json...")
-            with open(videos_json_path, "r", encoding="utf-8") as f:
-                raw_vids = json.load(f)
-            # Normalize fields for write_html_grid
-            all_videos = []
-            for v in raw_vids:
-                all_videos.append({
-                    "viewkey": v.get("viewkey", ""),
-                    "title": v.get("title", ""),
-                    "url": v.get("url", ""),
-                    "thumbnail": v.get("thumbnail", ""),
-                    "duration": v.get("duration", ""),
-                    "raw_duration": v.get("rawDuration", 0),
-                    "views": v.get("views", ""),
-                    "raw_views": v.get("rawViews", 0),
-                    "category": v.get("category", "none"),
-                    "remote_thumbnail": v.get("remoteThumbnail", ""),
-                })
-            output_file = "z3ncoding_videos_grid.html"
-            write_html_grid(all_videos, output_file, saved_categories)
-            print(f"\nSUCCESS! Generated {output_file} from {len(all_videos)} items.")
-            return
-        else:
-            print(f"Error: {videos_json_path} does not exist.")
-            return
 
     # Load blacklist
     blacklist = set()
@@ -600,16 +621,20 @@ def main():
     )
     all_videos.extend(new_related)
     all_videos.extend(new_recommended)
-    
+
+    # ── Track first-seen dates (append-only; can't be reconstructed later) ──
+    first_seen = load_first_seen()
+    if update_first_seen(first_seen, all_videos):
+        print(f"Updated {FIRST_SEEN_FILE} ({len(first_seen)} viewkeys tracked).")
+
     # Save updated categories back to file
     if new_related or new_recommended:
         print(f"\nSaving updated categories.json with {len(new_related)} related + {len(new_recommended)} recommended...")
         atomic_json_dump(saved_categories, CATEGORIES_FILE, indent=2)
 
-    output_file = "z3ncoding_videos_grid.html"
-    write_html_grid(all_videos, output_file, saved_categories)
-    
-    print(f"\nSUCCESS! Generated {output_file}")
+    write_videos_data(all_videos, saved_categories, first_seen)
+
+    print(f"\nSUCCESS! Wrote videos.json")
     print(f"Total unique videos processed: {len(all_videos)}")
     print(f"  - Profile videos: {len(all_videos) - len(new_related) - len(new_recommended)}")
     print(f"  - Related:        {len(new_related)}")

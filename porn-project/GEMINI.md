@@ -2,7 +2,14 @@
 # Gemini Project Context: porn-project
 
 ## Project Overview
-This project consists of a Python-based web scraper designed to extract video metadata from a specific Pornhub user profile and export the data into a CherryTree XML format (`.chpl`). The script has been updated to generate an interactive HTML grid for viewing and managing videos instead of a CherryTree file.
+This project consists of a Python-based web scraper (`generate_grid.py`, not `get_pornhub_videos.py`
+— see note below) designed to extract video metadata from a specific Pornhub user profile. It writes
+`videos.json`, which is served to a React frontend (`frontend/`, built with Vite) by `serve.py`.
+
+**Note (2026-08-03):** this file was written when the project's only UI was a generated single-file
+HTML grid (`z3ncoding_videos_grid.html`). That file has been retired in favor of the React frontend —
+see `CLAUDE.md` for the current architecture and `plans/improvements_audit.md` for why. The sections
+below still describe the old flow in places; treat `CLAUDE.md` as authoritative if the two disagree.
 
 ### Main Technologies
 - **Language:** Python 3

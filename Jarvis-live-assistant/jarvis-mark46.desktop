@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=J.A.R.V.I.S.
+GenericName=AI Voice Assistant
+Comment=MARK XLVI — Gemini Live GUI assistant
+Exec=/home/z3ncoding123/ai-projects/Jarvis-live-assistant/bin/jarvis-gui
+Icon=jarvis-mark46
+Terminal=false
+Categories=Utility;
+StartupNotify=true
+StartupWMClass=jarvis-mark46
+Keywords=AI;Assistant;Voice;Gemini;

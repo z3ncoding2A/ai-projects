@@ -1,3 +1,10 @@
+**STATUS (2026-08-03): implemented, but as a React rewrite (`frontend/`) rather than by editing
+the HTML template as originally planned below.** The legacy single-file template this plan targets
+has since been retired. See `plans/improvements_audit.md` for what changed and why. Left here for
+historical reference — the design intent (sidebar, Cinematic Dark theme, hover previews) still holds.
+
+---
+
 Here is the detailed plan for the "Cinematic Dark" redesign with a persistent sidebar. Since we have aligned on the aesthetic and layout, please review the finalized plan below.
 
 # UI Redesign Plan: Cinematic Dark with Sidebar
