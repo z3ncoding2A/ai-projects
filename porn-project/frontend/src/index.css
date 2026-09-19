@@ -626,64 +626,6 @@ body {
   flex-shrink: 0;
 }
 
-.filter-chips-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  overflow: hidden;
-}
-
-.filter-group-label {
-  font-size: 0.7rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  letter-spacing: 0.05em;
-  flex-shrink: 0;
-}
-
-.filter-chips-scroll {
-  display: flex;
-  gap: 6px;
-  overflow-x: auto;
-  padding-bottom: 2px;
-}
-
-.filter-chip {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  color: var(--text-secondary);
-  font-family: var(--font-body);
-  font-size: 0.72rem;
-  font-weight: 500;
-  padding: 3px 10px;
-  cursor: pointer;
-  white-space: nowrap;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  transition: all var(--duration-fast);
-}
-
-.filter-chip:hover {
-  background: var(--bg-card-hover);
-  color: var(--text-primary);
-  border-color: var(--border-strong);
-}
-
-.filter-chip.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
-
-.chip-count {
-  font-size: 0.62rem;
-  font-family: var(--font-mono);
-  opacity: 0.75;
-}
-
 .filter-facets-row {
   display: flex;
   align-items: center;
@@ -793,7 +735,7 @@ body {
   /* Column count is fixed (COLUMN_COUNTS in VideoGrid.jsx) and set inline so
      it can never disagree with the JS row-slicing logic — these values are
      just the pre-hydration fallback. */
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 14px;
   align-content: start;
 }

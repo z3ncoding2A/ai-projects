@@ -1,4 +1,3 @@
-import { useMemo } from 'react';
 import useVideoStore from '../../stores/useVideoStore';
 
 export default function FilterBar() {
@@ -12,19 +11,6 @@ export default function FilterBar() {
   const setActivePlaylist = useVideoStore((s) => s.setActivePlaylist);
   const searchQuery = useVideoStore((s) => s.searchQuery);
   const clearAllFilters = useVideoStore((s) => s.clearAllFilters);
-  const categoryTree = useVideoStore((s) => s.categoryTree);
-  const activeTab = useVideoStore((s) => s.activeTab);
-  const setTab = useVideoStore((s) => s.setTab);
-  const getCategoryCounts = useVideoStore((s) => s.getCategoryCounts);
-  const categories = useVideoStore((s) => s.categories);
-  const blacklist = useVideoStore((s) => s.blacklist);
-
-  const counts = useMemo(
-    () => getCategoryCounts(),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [categoryTree, categories, blacklist, getCategoryCounts]
-  );
-
   const hasActiveFilters =
     durationFilter !== 'all' ||
     watchFilter !== 'all' ||
@@ -34,37 +20,6 @@ export default function FilterBar() {
 
   return (
     <div className="filter-bar">
-      {/* Quick Category Chips Bar */}
-      <div className="filter-chips-row">
-        <div className="filter-group-label">Category:</div>
-        <div className="filter-chips-scroll">
-          <button
-            className={`filter-chip${activeTab === 'all' ? ' active' : ''}`}
-            onClick={() => setTab('all')}
-          >
-            All <span className="chip-count">{counts.all || 0}</span>
-          </button>
-          <button
-            className={`filter-chip${activeTab === 'none' ? ' active' : ''}`}
-            onClick={() => setTab('none')}
-          >
-            Uncategorized <span className="chip-count">{counts.none || 0}</span>
-          </button>
-          {categoryTree.map((cat) => (
-            <button
-              key={cat.id}
-              className={`filter-chip${activeTab === cat.id ? ' active' : ''}`}
-              onClick={() => setTab(cat.id)}
-              style={activeTab === cat.id && cat.color ? { borderColor: cat.color, color: '#fff' } : {}}
-            >
-              {cat.icon && <span className="chip-icon">{cat.icon}</span>}
-              {cat.name}
-              <span className="chip-count">{counts[cat.id] || 0}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* Facet Controls: Duration & Watch Status */}
       <div className="filter-facets-row">
         {/* Duration */}

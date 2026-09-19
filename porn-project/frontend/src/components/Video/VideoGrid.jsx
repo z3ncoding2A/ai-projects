@@ -9,7 +9,7 @@ import FilterBar from './FilterBar';
 // width. Cards flex to fill the row (grid-template-columns: repeat(N, 1fr)),
 // so browser zoom and the player panel resizing the grid only change card
 // size, never how many videos are visible per row.
-const COLUMN_COUNTS = { grid: 5, compact: 7, list: 1 };
+const COLUMN_COUNTS = { grid: 4, compact: 7, list: 1 };
 
 // Rough initial guess before the virtualizer measures real row height via
 // measureElement — only affects first paint / scrollbar sizing, not layout
