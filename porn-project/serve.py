@@ -13,6 +13,7 @@ import glob
 import threading
 import time
 import json
+import re
 import subprocess
 import urllib.parse
 from curl_cffi import requests
@@ -56,10 +57,22 @@ ALLOWED_PROXY_SUFFIXES = (
     "xhamster.com",
 )
 
+# Referer/Origin required by the source CDN. Pornhub's CDN started rejecting HLS
+# playlist/segment requests with 412 unless these are present; xHamster doesn't
+# require them but is unaffected by sending them anyway.
+PROXY_REFERER_BY_SUFFIX = (
+    (".phncdn.com", "https://www.pornhub.com/"),
+    (".pornhub.com", "https://www.pornhub.com/"),
+    ("pornhub.com", "https://www.pornhub.com/"),
+    (".xhcdn.com", "https://www.xhamster.com/"),
+    (".xhamster.com", "https://www.xhamster.com/"),
+    ("xhamster.com", "https://www.xhamster.com/"),
+)
+
 # In-process cache for yt-dlp stream extraction, keyed by source video URL.
 # Avoids re-spawning yt-dlp (2-5s) every time the same video is replayed.
 _STREAMS_CACHE = {}
-STREAMS_CACHE_TTL = 2 * 60 * 60  # 2 hours — stream URLs are signed and expire anyway
+STREAMS_CACHE_TTL = 45 * 60  # signed stream URLs expire ~1h after extraction
 
 os.chdir(DIRECTORY)
 
@@ -71,6 +84,17 @@ def _is_allowed_proxy_target(url):
         return False
     host = host.lower()
     return any(host == s.lstrip(".") or host.endswith(s) for s in ALLOWED_PROXY_SUFFIXES)
+
+
+def _proxy_headers(url):
+    try:
+        host = (urllib.parse.urlparse(url).hostname or "").lower()
+    except Exception:
+        return {}
+    for suffix, referer in PROXY_REFERER_BY_SUFFIX:
+        if host == suffix.lstrip(".") or host.endswith(suffix):
+            return {"Referer": referer, "Origin": referer.rstrip("/")}
+    return {}
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -115,14 +139,29 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self._json_response(403, {"error": "Host not in proxy allowlist"})
                 return
 
+            headers = _proxy_headers(target_url)
+
             try:
                 if ".m3u8" in target_url or "application/vnd.apple.mpegurl" in target_url:
-                    res = requests.get(target_url, impersonate="chrome")
+                    res = requests.get(target_url, impersonate="chrome", headers=headers)
                     base_url = target_url.rsplit("/", 1)[0] + "/"
+
+                    def _rewrite_uri(match):
+                        raw_uri = match.group(1)
+                        full = raw_uri if raw_uri.startswith("http") else urllib.parse.urljoin(base_url, raw_uri)
+                        return f'URI="/api/proxy?url={urllib.parse.quote(full)}"'
+
                     new_lines = []
                     for line in res.text.split("\n"):
                         line = line.strip()
-                        if not line or line.startswith("#"):
+                        if not line:
+                            new_lines.append(line)
+                        elif line.startswith("#"):
+                            # Tags like #EXT-X-MAP carry a URI="..." attribute (the fMP4
+                            # init segment) that also needs proxying — the player resolves
+                            # it against this playlist's own /api/proxy URL otherwise.
+                            if "URI=" in line:
+                                line = re.sub(r'URI="([^"]+)"', _rewrite_uri, line)
                             new_lines.append(line)
                         else:
                             if not line.startswith("http"):
@@ -131,7 +170,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                                 full_url = line
                             proxy_url = f"/api/proxy?url={urllib.parse.quote(full_url)}"
                             new_lines.append(proxy_url)
-                    
+
                     content = "\n".join(new_lines).encode("utf-8")
                     self.send_response(200)
                     self.send_header("Content-Type", "application/vnd.apple.mpegurl")
@@ -140,7 +179,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     self.end_headers()
                     self.wfile.write(content)
                 else:
-                    res = requests.get(target_url, impersonate="chrome", stream=True)
+                    res = requests.get(target_url, impersonate="chrome", headers=headers, stream=True)
                     self.send_response(res.status_code)
                     self.send_header("Content-Type", res.headers.get("Content-Type", "application/octet-stream"))
                     self.send_header("Access-Control-Allow-Origin", "*")
@@ -326,6 +365,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             # Skip direct MP4s because they require strict User-Agent/IP matching
             proto = f.get("protocol", "")
             if "m3u8" not in proto:
+                continue
+
+            # Skip hosts /api/proxy won't serve — otherwise a disallowed host claims
+            # this height (via seen_heights below) and blocks an allowlisted
+            # alternative at the same height from ever being considered.
+            if not _is_allowed_proxy_target(stream_url):
                 continue
 
             # Skip duplicate heights
