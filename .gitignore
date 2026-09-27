@@ -25,3 +25,6 @@ __pycache__/
 *.pyo
 
 */Jarvis-live-assistant/config/api_keys.json
+
+# Per-machine Claude Code settings (permission rules, output style)
+**/.claude/settings.local.json
