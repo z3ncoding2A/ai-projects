@@ -9,6 +9,8 @@ from xml.sax.saxutils import escape
 import yt_dlp
 from concurrent.futures import ThreadPoolExecutor
 
+from data_files import atomic_write_text, data_file_lock
+
 # Base URL and user profile
 BASE_URL = "https://www.pornhub.com"
 PROFILE_VIDEOS_URL = "https://www.pornhub.com/users/z3ncoding/videos/recent"
@@ -40,8 +42,7 @@ def update_first_seen(first_seen, all_videos):
             first_seen[vk] = today
             changed = True
     if changed:
-        with open(FIRST_SEEN_FILE, "w", encoding="utf-8") as f:
-            json.dump(first_seen, f, indent=2, ensure_ascii=False)
+        atomic_json_dump(first_seen, FIRST_SEEN_FILE, indent=2, ensure_ascii=False)
     return changed
 
 if not os.path.exists(THUMBS_DIR):
@@ -49,10 +50,7 @@ if not os.path.exists(THUMBS_DIR):
 
 def atomic_json_dump(data, path, **json_kwargs):
     """Write JSON via a temp file + os.replace so readers never see a partial file."""
-    tmp_path = f"{path}.tmp"
-    with open(tmp_path, "w", encoding="UTF-8") as f:
-        json.dump(data, f, **json_kwargs)
-    os.replace(tmp_path, path)
+    atomic_write_text(path, json.dumps(data, **json_kwargs))
 
 # Headers to avoid being blocked
 HEADERS = {
@@ -517,8 +515,7 @@ def write_videos_data(all_videos, saved_categories, first_seen=None):
         })
 
     videos_json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "videos.json")
-    with open(videos_json_path, "w", encoding="UTF-8") as f:
-        json.dump(react_videos, f, indent=2, ensure_ascii=False)
+    atomic_json_dump(react_videos, videos_json_path, indent=2, ensure_ascii=False)
 
     # Also save the videos to videos.json for the modern React UI (as objects, not arrays)
     react_videos = []
@@ -622,17 +619,20 @@ def main():
     all_videos.extend(new_related)
     all_videos.extend(new_recommended)
 
-    # ── Track first-seen dates (append-only; can't be reconstructed later) ──
-    first_seen = load_first_seen()
-    if update_first_seen(first_seen, all_videos):
-        print(f"Updated {FIRST_SEEN_FILE} ({len(first_seen)} viewkeys tracked).")
+    # Held only for the writes, not the scrape above: serve.py takes the same
+    # lock for its read-modify-writes of these files (see data_files.py).
+    with data_file_lock():
+        # ── Track first-seen dates (append-only; can't be reconstructed later) ──
+        first_seen = load_first_seen()
+        if update_first_seen(first_seen, all_videos):
+            print(f"Updated {FIRST_SEEN_FILE} ({len(first_seen)} viewkeys tracked).")
 
-    # Save updated categories back to file
-    if new_related or new_recommended:
-        print(f"\nSaving updated categories.json with {len(new_related)} related + {len(new_recommended)} recommended...")
-        atomic_json_dump(saved_categories, CATEGORIES_FILE, indent=2)
+        # Save updated categories back to file
+        if new_related or new_recommended:
+            print(f"\nSaving updated categories.json with {len(new_related)} related + {len(new_recommended)} recommended...")
+            atomic_json_dump(saved_categories, CATEGORIES_FILE, indent=2)
 
-    write_videos_data(all_videos, saved_categories, first_seen)
+        write_videos_data(all_videos, saved_categories, first_seen)
 
     print(f"\nSUCCESS! Wrote videos.json")
     print(f"Total unique videos processed: {len(all_videos)}")

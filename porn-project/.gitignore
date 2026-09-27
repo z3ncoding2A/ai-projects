@@ -24,3 +24,7 @@ z3ncoding_videos_grid.html
 temp_script.js
 test_page.html
 screenshot.png
+
+# Atomic-write temp files and the cross-process data lock (see data_files.py)
+*.tmp
+.data.lock

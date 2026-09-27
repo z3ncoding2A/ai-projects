@@ -14,11 +14,14 @@ import threading
 import time
 import json
 import gzip
+import re
 import subprocess
 import urllib.parse
 from curl_cffi import requests
 from anthropic import Anthropic
 from bs4 import BeautifulSoup
+
+from data_files import atomic_write_text, data_file_lock
 
 PORT = 8888
 DIRECTORY = os.path.dirname(os.path.abspath(__file__))
@@ -74,7 +77,10 @@ ALLOWED_PROXY_SUFFIXES = (
 # In-process cache for yt-dlp stream extraction, keyed by source video URL.
 # Avoids re-spawning yt-dlp (2-5s) every time the same video is replayed.
 _STREAMS_CACHE = {}
-STREAMS_CACHE_TTL = 2 * 60 * 60  # 2 hours — stream URLs are signed and expire anyway
+# Pornhub's signed HLS URLs are valid for exactly 2h from extraction
+# (validto - validfrom = 7200). Caching them for that long meant a replay late in
+# the window got URLs that expired mid-video, so keep well inside it.
+STREAMS_CACHE_TTL = 30 * 60
 
 os.chdir(DIRECTORY)
 
@@ -97,6 +103,10 @@ GZIP_MIN_BYTES = 1024
 _payload_cache = {}
 _payload_cache_lock = threading.Lock()
 
+# URI="..." attributes in HLS tags (#EXT-X-MAP init segments, #EXT-X-KEY keys,
+# #EXT-X-MEDIA renditions).
+_HLS_URI_ATTR_RE = re.compile(r'URI="([^"]+)"')
+
 
 def _invalidate_payload(path):
     """Drop a cached payload after its file is rewritten."""
@@ -111,6 +121,42 @@ def _is_allowed_proxy_target(url):
         return False
     host = host.lower()
     return any(host == s.lstrip(".") or host.endswith(s) for s in ALLOWED_PROXY_SUFFIXES)
+
+
+def _rewrite_playlist_uri(raw_uri, base_url):
+    """
+    Point one playlist URI at /api/proxy, resolved against the playlist's own
+    URL, so the browser never fetches it relative to /api/proxy (and 404s).
+    Only URIs the proxy will actually serve get rewritten: an http(s) URL on a
+    host outside the allowlist is left absolute for the browser to fetch
+    directly (proxying it would just 403), and non-http schemes (data:, skd:)
+    are left untouched.
+    """
+    full = urllib.parse.urljoin(base_url, raw_uri)
+    scheme = urllib.parse.urlparse(full).scheme
+    if scheme not in ("http", "https"):
+        return raw_uri
+    if not _is_allowed_proxy_target(full):
+        return full
+    return f"/api/proxy?url={urllib.parse.quote(full)}"
+
+
+def _rewrite_playlist(text, base_url):
+    """Rewrite every URI in an m3u8 playlist (bare lines and URI="..." tag attributes)."""
+    new_lines = []
+    for line in text.split("\n"):
+        line = line.strip()
+        if not line:
+            new_lines.append(line)
+        elif line.startswith("#"):
+            # fMP4 playlists carry the init segment in a tag attribute
+            # (#EXT-X-MAP:URI="init.mp4"), and keys live in URI="..." too.
+            new_lines.append(_HLS_URI_ATTR_RE.sub(
+                lambda m: f'URI="{_rewrite_playlist_uri(m.group(1), base_url)}"', line
+            ))
+        else:
+            new_lines.append(_rewrite_playlist_uri(line, base_url))
+    return "\n".join(new_lines)
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -203,20 +249,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         return
 
                     base_url = target_url.rsplit("/", 1)[0] + "/"
-                    new_lines = []
-                    for line in res.text.split("\n"):
-                        line = line.strip()
-                        if not line or line.startswith("#"):
-                            new_lines.append(line)
-                        else:
-                            if not line.startswith("http"):
-                                full_url = urllib.parse.urljoin(base_url, line)
-                            else:
-                                full_url = line
-                            proxy_url = f"/api/proxy?url={urllib.parse.quote(full_url)}"
-                            new_lines.append(proxy_url)
-                    
-                    content = "\n".join(new_lines).encode("utf-8")
+                    content = _rewrite_playlist(res.text, base_url).encode("utf-8")
                     self.send_response(200)
                     self.send_header("Content-Type", "application/vnd.apple.mpegurl")
                     self.send_header("Content-Length", str(len(content)))
@@ -225,12 +258,20 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     headers_sent = True
                     self.wfile.write(content)
                 else:
+                    # Byte-range playlists (#EXT-X-BYTERANGE, EXT-X-MAP BYTERANGE)
+                    # point several segments at one file and have hls.js request
+                    # each slice with a Range header. Without forwarding it the
+                    # upstream returns the whole file and hls.js fails to parse it.
+                    client_range = self.headers.get("Range")
+                    if client_range:
+                        upstream_headers = {**upstream_headers, "Range": client_range}
                     res = requests.get(target_url, impersonate="chrome", stream=True, headers=upstream_headers)
                     self.send_response(res.status_code)
                     self.send_header("Content-Type", res.headers.get("Content-Type", "application/octet-stream"))
                     self.send_header("Access-Control-Allow-Origin", "*")
-                    if "Content-Length" in res.headers:
-                        self.send_header("Content-Length", res.headers["Content-Length"])
+                    for name in ("Content-Length", "Content-Range", "Accept-Ranges"):
+                        if name in res.headers:
+                            self.send_header(name, res.headers[name])
                     self.end_headers()
                     headers_sent = True
                     for chunk in res.iter_content(chunk_size=8192):
@@ -354,14 +395,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             body = self.rfile.read(content_length).decode("utf-8")
 
             try:
-                if cfg["type"] == "json":
-                    data = json.loads(body)
-                    self._write_json_file(cfg["path"], data)
-                else:
-                    items = json.loads(body)
-                    text = "\n".join(str(item) for item in items) + "\n"
-                    self._write_text_file(cfg["path"], text)
-                _invalidate_payload(cfg["path"])
+                with data_file_lock():
+                    if cfg["type"] == "json":
+                        data = json.loads(body)
+                        self._write_json_file(cfg["path"], data)
+                    else:
+                        items = json.loads(body)
+                        text = "\n".join(str(item) for item in items) + "\n"
+                        self._write_text_file(cfg["path"], text)
+                    _invalidate_payload(cfg["path"])
                 self._json_response(200, {"ok": True})
             except Exception as e:
                 self._json_response(500, {"error": str(e)})
@@ -450,15 +492,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         with open(path, "r", encoding="utf-8") as f:
             return f.read()
 
+    # Both go through atomic_write_text: GET handlers read these files without
+    # any lock, so a write must never leave a truncated or half-written file.
     def _write_json_file(self, path, data):
-        tmp_path = f"{path}.tmp"
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-        os.replace(tmp_path, path)
+        atomic_write_text(path, json.dumps(data, indent=2, ensure_ascii=False))
 
     def _write_text_file(self, path, text):
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(text)
+        atomic_write_text(path, text)
 
     def _categorize_videos(self, items):
         """
@@ -646,8 +686,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         to videos.json, so a hover-preview that failed because its signed
         CDN URL expired self-heals for next time.
         """
-        videos = self._read_json_file(DATA_FILES["videos"]["path"], [])
-        record = next((v for v in videos if v.get("viewkey") == viewkey), None)
+        path = DATA_FILES["videos"]["path"]
+
+        # No lock for this lookup: writes are atomic, so an unlocked read always
+        # sees a whole file, and holding the lock through a 5MB parse would
+        # stall every history/category save behind it.
+        record = next(
+            (v for v in self._read_json_file(path, []) if v.get("viewkey") == viewkey),
+            None,
+        )
         if record is None:
             return {"error": "Unknown viewkey", "remoteThumbnail": ""}
 
@@ -664,10 +711,18 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 except Exception:
                     fresh = ""
 
-        if fresh and fresh != record.get("remoteThumbnail"):
-            record["remoteThumbnail"] = fresh
-            self._write_json_file(DATA_FILES["videos"]["path"], videos)
-            _invalidate_payload(DATA_FILES["videos"]["path"])
+        # Re-read under the lock: the scrape above is slow and unsynchronized,
+        # so the copy read earlier is stale by now and writing it back would
+        # clobber whatever other threads (or a generate_grid.py run) persisted
+        # in the meantime.
+        if fresh:
+            with data_file_lock():
+                videos = self._read_json_file(path, [])
+                current = next((v for v in videos if v.get("viewkey") == viewkey), None)
+                if current is not None and current.get("remoteThumbnail") != fresh:
+                    current["remoteThumbnail"] = fresh
+                    self._write_json_file(path, videos)
+                    _invalidate_payload(path)
 
         return {"remoteThumbnail": fresh}
 
