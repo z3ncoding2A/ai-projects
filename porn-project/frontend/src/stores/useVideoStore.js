@@ -89,6 +89,22 @@ if (typeof window !== 'undefined') {
   });
 }
 
+// Videos-per-row for the standard grid. A per-browser display preference, so
+// it lives in localStorage rather than a server-side JSON file — a phone and a
+// desktop monitor reasonably want different values.
+export const GRID_COLUMN_MIN = 2;
+export const GRID_COLUMN_MAX = 5;
+const GRID_COLUMN_DEFAULT = 4;
+const GRID_COLUMNS_KEY = 'gridColumns';
+
+function loadGridColumns() {
+  try {
+    const n = parseInt(localStorage.getItem(GRID_COLUMNS_KEY), 10);
+    if (n >= GRID_COLUMN_MIN && n <= GRID_COLUMN_MAX) return n;
+  } catch { /* storage blocked (private window etc.) — use the default */ }
+  return GRID_COLUMN_DEFAULT;
+}
+
 const useVideoStore = create((set, get) => ({
   // ── Data ──────────────────────────────────────────────────────────
   videos: [],
@@ -118,6 +134,7 @@ const useVideoStore = create((set, get) => ({
   sortMode: 'random',
   shuffleSeed: Date.now(),
   viewMode: 'grid',          // 'grid' (comfortable) | 'compact' | 'list' (dense table)
+  gridColumns: loadGridColumns(), // videos per row in 'grid' mode (GRID_COLUMN_MIN..MAX)
   isBulkMode: false,
   selectedVideos: new Set(),
   isTheaterMode: false,
@@ -459,6 +476,14 @@ const useVideoStore = create((set, get) => ({
 
   // ── View Mode ─────────────────────────────────────────────────────
   setViewMode: (mode) => set({ viewMode: mode }),
+
+  // Picking a column count also switches to 'grid', since that's the only
+  // mode the setting applies to (compact/list have their own fixed layouts).
+  setGridColumns: (n) => {
+    const cols = Math.max(GRID_COLUMN_MIN, Math.min(GRID_COLUMN_MAX, n));
+    try { localStorage.setItem(GRID_COLUMNS_KEY, String(cols)); } catch { /* storage blocked */ }
+    set({ gridColumns: cols, viewMode: 'grid' });
+  },
 
   // ── Sidebar & Layout ──────────────────────────────────────────────
   toggleSidebar: () => set((s) => ({ isSidebarCollapsed: !s.isSidebarCollapsed })),

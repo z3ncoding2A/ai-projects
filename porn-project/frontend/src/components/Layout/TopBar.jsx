@@ -1,6 +1,11 @@
 import { useRef, useCallback, useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
-import useVideoStore from '../../stores/useVideoStore';
+import useVideoStore, { GRID_COLUMN_MIN, GRID_COLUMN_MAX } from '../../stores/useVideoStore';
+
+const GRID_COLUMN_OPTIONS = Array.from(
+  { length: GRID_COLUMN_MAX - GRID_COLUMN_MIN + 1 },
+  (_, i) => GRID_COLUMN_MIN + i,
+);
 
 export default function TopBar() {
   const searchQuery = useVideoStore((s) => s.searchQuery);
@@ -9,6 +14,8 @@ export default function TopBar() {
   const setSortMode = useVideoStore((s) => s.setSortMode);
   const viewMode = useVideoStore((s) => s.viewMode);
   const setViewMode = useVideoStore((s) => s.setViewMode);
+  const gridColumns = useVideoStore((s) => s.gridColumns);
+  const setGridColumns = useVideoStore((s) => s.setGridColumns);
   const isBulkMode = useVideoStore((s) => s.isBulkMode);
   const toggleBulkMode = useVideoStore((s) => s.toggleBulkMode);
   const selectedVideos = useVideoStore((s) => s.selectedVideos);
@@ -177,6 +184,21 @@ export default function TopBar() {
           >
             ☰
           </button>
+        </div>
+
+        {/* Videos per row (standard grid only — clicking switches to it) */}
+        <div className="density-toggle-group" title="Videos per row">
+          <span className="density-toggle-label">Per row</span>
+          {GRID_COLUMN_OPTIONS.map((n) => (
+            <button
+              key={n}
+              className={`topbar-btn${viewMode === 'grid' && gridColumns === n ? ' active' : ''}`}
+              onClick={() => setGridColumns(n)}
+              title={`${n} videos per row`}
+            >
+              {n}
+            </button>
+          ))}
         </div>
 
         <div className="topbar-divider" />

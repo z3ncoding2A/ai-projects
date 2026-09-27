@@ -532,6 +532,14 @@ body {
   color: #fff;
 }
 
+.density-toggle-label {
+  align-self: center;
+  padding: 0 6px 0 4px;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
 .topbar-btn {
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -770,9 +778,10 @@ body {
 
 .video-grid {
   display: grid;
-  /* Column count is fixed (COLUMN_COUNTS in VideoGrid.jsx) and set inline so
-     it can never disagree with the JS row-slicing logic — these values are
-     just the pre-hydration fallback. */
+  /* Column count comes from getColumnCount() in VideoGrid.jsx (user-selectable
+     2–5 for this standard grid) and is set inline so it can never disagree
+     with the JS row-slicing logic — these values are just the pre-hydration
+     fallback. */
   grid-template-columns: repeat(4, 1fr);
   gap: 14px;
   align-content: start;
