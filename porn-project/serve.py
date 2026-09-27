@@ -70,6 +70,7 @@ ALLOWED_PROXY_SUFFIXES = (
     ".pornhub.com",
     "pornhub.com",
     ".xhcdn.com",
+    ".ahcdn.com",  # xHamster's per-edge hosts (ip<N>.ahcdn.com) for HLS variants
     ".xhamster.com",
     "xhamster.com",
 )
@@ -415,6 +416,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     REFERER_BY_CDN = {
         "phncdn.com": "https://www.pornhub.com/",
         "xhcdn.com": "https://xhamster.com/",
+        "ahcdn.com": "https://xhamster.com/",
     }
 
     def _referer_headers(self, target_url):

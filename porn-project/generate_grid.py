@@ -32,6 +32,18 @@ def load_first_seen():
     return {}
 
 
+def read_categories():
+    """
+    Current categories.json. Unlike the startup load in main(), a parse error
+    raises instead of returning {}, so an unreadable file is never "merged"
+    into an empty dict and written back over the user's categories.
+    """
+    if not os.path.exists(CATEGORIES_FILE):
+        return {}
+    with open(CATEGORIES_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
 def update_first_seen(first_seen, all_videos):
     """Add today's date for any viewkey not already tracked. Returns True if changed."""
     today = datetime.date.today().isoformat()
@@ -514,27 +526,8 @@ def write_videos_data(all_videos, saved_categories, first_seen=None):
             "firstSeen": item[12]
         })
 
-    videos_json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "videos.json")
-    atomic_json_dump(react_videos, videos_json_path, indent=2, ensure_ascii=False)
-
-    # Also save the videos to videos.json for the modern React UI (as objects, not arrays)
-    react_videos = []
-    for item in json_videos:
-        react_videos.append({
-            "idx": item[0],
-            "title": item[1],
-            "url": item[2],
-            "thumbnail": item[3],
-            "duration": item[4],
-            "rawDuration": item[5],
-            "views": item[6],
-            "rawViews": item[7],
-            "viewkey": item[8],
-            "category": item[9],
-            "searchText": item[10],
-            "remoteThumbnail": item[11]
-        })
-
+    # Written once. A second, older copy of this block used to overwrite it
+    # without firstSeen, which the frontend's "sort by date added" depends on.
     videos_json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "videos.json")
     atomic_json_dump(react_videos, videos_json_path, indent=2, ensure_ascii=False)
 
@@ -613,6 +606,7 @@ def main():
         return
 
     # ── Scrape Related & Recommended from all MOST LIKED videos ──
+    startup_category_keys = set(saved_categories)
     new_related, new_recommended = scrape_related_and_recommended(
         saved_categories, all_videos, seen_viewkeys
     )
@@ -627,9 +621,16 @@ def main():
         if update_first_seen(first_seen, all_videos):
             print(f"Updated {FIRST_SEEN_FILE} ({len(first_seen)} viewkeys tracked).")
 
-        # Save updated categories back to file
-        if new_related or new_recommended:
-            print(f"\nSaving updated categories.json with {len(new_related)} related + {len(new_recommended)} recommended...")
+        # Merge this run's new related/recommended entries into a fresh read of
+        # categories.json rather than writing back the copy loaded at startup:
+        # the scrape takes minutes, and anything re-categorized in the UI in
+        # the meantime would otherwise be silently reverted.
+        added = {vk: cat for vk, cat in saved_categories.items() if vk not in startup_category_keys}
+        saved_categories = read_categories()
+        new_entries = {vk: cat for vk, cat in added.items() if vk not in saved_categories}
+        if new_entries:
+            print(f"\nSaving updated categories.json with {len(new_entries)} new related/recommended entries...")
+            saved_categories.update(new_entries)
             atomic_json_dump(saved_categories, CATEGORIES_FILE, indent=2)
 
         write_videos_data(all_videos, saved_categories, first_seen)
