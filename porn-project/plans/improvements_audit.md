@@ -78,6 +78,18 @@ retiring the template rather than patching it.
 `_get_streams` spawns a `yt-dlp` subprocess per play (30 s timeout, typically 2–5 s). Re-playing the
 same video re-runs it. An in-process dict keyed by URL with a ~2 h TTL makes replays instant. *~20 min.*
 
+**Update 2026-09-27:** done (`_STREAMS_CACHE`), but the TTL is now **30 min**, not 2 h. Pornhub's signed
+HLS URLs are valid for exactly 2 h from extraction (`validto - validfrom = 7200`), so a 2 h cache handed
+late replays URLs that expired mid-video — fragments 403'd and the player stalled. Other constraints
+found while moving playback to hls.js:
+- Pornhub has **one master playlist per quality**, each with a single variant (8,238 of 8,239 videos).
+  yt-dlp's `manifest_url` is therefore per-quality too; there is no master listing every quality, so
+  quality switches rebuild the hls.js player. Native level switching (and ABR) would need `serve.py`
+  to synthesize a combined master playlist — not done.
+- xHamster's master playlists group variants by codec (AVC with muxed audio, AV1), some variants live on
+  per-edge `ip<N>.ahcdn.com` hosts (now allowlisted), and 1080p/720p are fMP4 with `EXT-X-MAP` init
+  segments — which the proxy's playlist rewrite now covers (`URI="..."` attributes, not just bare lines).
+
 ### 2.5 Cheaper filtering
 
 `filterAndSort` re-filters **and re-sorts** all 8,103 entries on every debounced keystroke. Skip the
@@ -89,6 +101,11 @@ next to 2.1–2.3.
 `/api/proxy` forwards neither the client's `Range` header nor `Accept-Ranges`. Fine for HLS segments,
 but it means a direct-MP4 fallback path can never seek. Worth fixing only if you re-enable MP4 formats
 (currently skipped at `serve.py:_get_streams`, "Skip direct MP4s").
+
+**Update 2026-09-27:** done — "fine for HLS segments" was wrong for byte-range playlists
+(`#EXT-X-BYTERANGE`, `EXT-X-MAP ... BYTERANGE`), where hls.js requests slices of one file. The proxy now
+forwards `Range` upstream and relays the 206 with `Content-Range`/`Accept-Ranges` (verified against the
+phncdn CDN: `bytes=0-99` → 206, 100 bytes).
 
 ---
 
@@ -117,7 +134,7 @@ allowlist proxy target hostnames to the CDN domains you actually stream from. *~
 | **Browse by tag** | Tags are addable in the details modal and persisted to `tags.json`, but there is **no way to filter or browse by them**. The feature is currently write-only. | S |
 | **Playlists as a playback source** | Same problem: `playlists.json` is written and read, but a playlist can't be opened as a tab or queued. | S |
 | **Saved filter presets** | Advanced search (min views / min duration / regex) resets on every reload. Persist named presets to the sidebar. | S |
-| **Sort by date added** | No date field exists in the data at all. Requires `generate_grid.py` to record `first_seen` per viewkey on scrape — cheap now, impossible retroactively, so worth adding early. | S (but do it soon) |
+| **Sort by date added** | No date field exists in the data at all. Requires `generate_grid.py` to record `first_seen` per viewkey on scrape — cheap now, impossible retroactively, so worth adding early. **Update 2026-09-27:** implemented, but silently broken until now — `write_videos_data` wrote `videos.json` twice and the second copy dropped `firstSeen`, which is what the frontend sorts on. Fixed and backfilled from `first_seen.json`. | S (but do it soon) |
 | **Dead-link pruning** | A HEAD-check pass over 8k URLs flagging 404s, run from `scratch/`. | M |
 | **Richer stats** | Current panel shows 3 numbers + a pie chart. Category totals by *watch time*, watched-over-time, and per-category duration would use data you already have. | M |
 | **Shuffle / radio mode** | Fill the queue with N random videos matching the current filter. Trivial given the queue already exists. | S |
