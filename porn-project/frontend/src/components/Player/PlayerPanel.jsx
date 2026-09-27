@@ -4,6 +4,48 @@ import { buildEmbedUrl } from '../../utils/formatters';
 import { fetchStreams } from '../../utils/api';
 import VideoDetailsPanel from './VideoDetailsPanel';
 
+// Streams arrive sorted highest-quality first. Default to the best stream at or
+// below 1080p instead of the top entry, which can be 4K and needlessly heavy to
+// stream; if every stream is above the cap, take the one closest to it (last).
+const PREFERRED_MAX_HEIGHT = 1080;
+
+function pickDefaultStreamIdx(streams) {
+  const idx = streams.findIndex((s) => s.height <= PREFERRED_MAX_HEIGHT);
+  return idx !== -1 ? idx : streams.length - 1;
+}
+
+// Resume from watch history, except into the last ~15s: a video that was
+// basically finished starts over instead of replaying its tail. -1 means
+// "start from the beginning" (also hls.js's startPosition default).
+const MIN_RESUME_SECONDS = 5;
+const RESUME_TAIL_SECONDS = 15;
+
+function historyResumePosition(saved, duration) {
+  if (!saved || saved < MIN_RESUME_SECONDS) return -1;
+  if (duration > 0 && saved >= duration - RESUME_TAIL_SECONDS) return -1;
+  return saved;
+}
+
+// hls.js has already retried internally by the time it reports an error as
+// fatal, so only a couple more attempts are worth making before dropping to the
+// iframe embed. The network count resets whenever a fragment buffers, so only
+// back-to-back failures (e.g. signed segment URLs that have expired) use it up.
+const MAX_NETWORK_RETRIES = 2;
+const MAX_MEDIA_RECOVERIES = 3;
+
+// hls.js is ~400KB and only needed once a video actually plays, so it's loaded
+// on first use rather than shipped in the main bundle.
+let hlsModulePromise = null;
+function loadHls() {
+  hlsModulePromise ??= import('hls.js')
+    .then((m) => m.default)
+    .catch((err) => {
+      hlsModulePromise = null; // let the next video retry a failed chunk load
+      throw err;
+    });
+  return hlsModulePromise;
+}
+
 export default function PlayerPanel() {
   const currentVideo = useVideoStore((s) => s.currentVideo);
   const playNext = useVideoStore((s) => s.playNext);
@@ -14,8 +56,9 @@ export default function PlayerPanel() {
   const activeStreamIdx = useVideoStore((s) => s.activeStreamIdx);
   const setActiveStream = useVideoStore((s) => s.setActiveStream);
   const loadNonce = useVideoStore((s) => s.loadNonce);
-  const watchHistory = useVideoStore((s) => s.watchHistory);
   const updatePlaybackPosition = useVideoStore((s) => s.updatePlaybackPosition);
+  const viewkey = currentVideo?.viewkey;
+  const rawDuration = currentVideo?.rawDuration;
 
   const videoRef = useRef(null);
   const iframeRef = useRef(null);
@@ -24,25 +67,13 @@ export default function PlayerPanel() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const autoNextTimerRef = useRef(null);
   const lastPositionSaveRef = useRef(0);
-  const qualitySwitchRef = useRef(null); // { timeoutId, video, listener } for the in-flight quality switch, if any
-
-  const clearPendingQualitySwitch = useCallback(() => {
-    const pending = qualitySwitchRef.current;
-    if (!pending) return;
-    clearTimeout(pending.timeoutId);
-    if (pending.video && pending.listener) {
-      pending.video.removeEventListener('loadedmetadata', pending.listener);
-    }
-    qualitySwitchRef.current = null;
-  }, []);
-
-  // Cancel any pending quality-switch reseek when the video itself changes or
-  // the component unmounts — otherwise a stale currentTime from the previous
-  // video could get applied to whatever plays next (review finding: stale
-  // closure + no cleanup in handleQualitySelect).
-  useEffect(() => {
-    return clearPendingQualitySwitch;
-  }, [currentVideo?.viewkey, clearPendingQualitySwitch]);
+  // Resume point queued by a quality switch, consumed by the load effect.
+  // Tagged with its viewkey so a stale currentTime can't be applied to a
+  // different video that started playing in the meantime.
+  const pendingSeekRef = useRef(null);
+  // While hls.js drives the <video>, routes element 'error' events into its
+  // media-error recovery (null otherwise).
+  const hlsRecoverRef = useRef(null);
 
   useEffect(() => {
     const onChange = () => setIsFullscreen(!!document.fullscreenElement);
@@ -95,7 +126,7 @@ export default function PlayerPanel() {
         if (cancelled) return;
 
         if (data.streams?.length > 0) {
-          setStreams(data.streams, 0);
+          setStreams(data.streams, pickDefaultStreamIdx(data.streams));
           setPlayerMode('native');
           setLoading(false);
         } else {
@@ -140,38 +171,123 @@ export default function PlayerPanel() {
     };
   }, [playerMode, streams, activeStreamIdx, loadNonce, fallbackToIframe]);
 
-  // Set video src when stream changes
+  // Set video src when stream changes. The streams are HLS playlists, which
+  // only Safari can decode from a plain src assignment — everywhere else they
+  // need hls.js via Media Source Extensions, or the <video> silently never
+  // becomes playable and the watchdog drops us to the iframe embed.
+  //
+  // This effect is also the one place the start position is decided, so no
+  // other 'loadedmetadata' listener can seek over it later (e.g. when a media
+  // error recovery re-attaches the MediaSource).
   useEffect(() => {
-    if (playerMode === 'native' && streams.length > 0 && videoRef.current) {
-      const stream = streams[activeStreamIdx];
-      if (stream) {
-        videoRef.current.src = stream.url;
-        videoRef.current.play().catch(() => {});
-      }
-    }
-  }, [playerMode, streams, activeStreamIdx]);
-
-  // Resume playback: seek to the saved position once metadata (and therefore
-  // duration) is available. Skips resuming into the last ~15s so a video that
-  // was basically finished starts over instead of replaying the tail.
-  useEffect(() => {
+    if (playerMode !== 'native' || streams.length === 0) return;
     const video = videoRef.current;
-    if (!video || playerMode !== 'native' || !currentVideo) return;
+    const stream = streams[activeStreamIdx];
+    if (!video || !stream || !viewkey) return;
 
-    const saved = watchHistory[currentVideo.viewkey]?.lastPosition;
-    if (!saved || saved < 5) return;
-
-    const onLoadedMetadata = () => {
-      if (saved < video.duration - 15) {
-        video.currentTime = saved;
-      }
+    // A quality switch on this same video resumes where it left off, in the
+    // same paused/playing state (queued by handleQualitySelect); any other
+    // load resumes from watch history. Read synchronously, before the async
+    // hls.js import below.
+    const pendingSeek = pendingSeekRef.current;
+    pendingSeekRef.current = null;
+    const qualitySwitch = pendingSeek?.viewkey === viewkey ? pendingSeek : null;
+    // Read from the store rather than subscribing: history updates every ~5s
+    // during playback, and depending on it would rebuild the player each time.
+    const saved = useVideoStore.getState().watchHistory[viewkey]?.lastPosition;
+    const startPositionFor = (duration) =>
+      qualitySwitch ? qualitySwitch.currentTime : historyResumePosition(saved, duration);
+    // Playback is started explicitly rather than with the autoPlay attribute,
+    // which would restart a paused video as soon as the new source buffered.
+    const play = () => {
+      if (!qualitySwitch?.wasPaused) video.play().catch(() => {});
     };
-    video.addEventListener('loadedmetadata', onLoadedMetadata);
-    return () => video.removeEventListener('loadedmetadata', onLoadedMetadata);
-    // Only re-run when the video itself changes, not on every watchHistory update
-    // (which would otherwise re-seek on every throttled position save).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentVideo?.viewkey, playerMode, streams]);
+
+    let cancelled = false;
+    let hls = null;
+
+    // Safari decodes HLS natively from a plain src.
+    const onNativeMetadata = () => {
+      const start = startPositionFor(video.duration);
+      if (start > 0) video.currentTime = start;
+      play();
+    };
+    const startNative = () => {
+      video.addEventListener('loadedmetadata', onNativeMetadata, { once: true });
+      video.src = stream.url;
+    };
+
+    loadHls()
+      .then((Hls) => {
+        if (cancelled) return;
+        if (!Hls.isSupported()) {
+          startNative();
+          return;
+        }
+
+        hls = new Hls({ startPosition: startPositionFor(rawDuration) });
+        let manifestParsed = false;
+        let networkRetries = 0;
+        let mediaRecoveries = 0;
+
+        const recoverMedia = () => {
+          if (mediaRecoveries >= MAX_MEDIA_RECOVERIES) {
+            fallbackToIframe();
+            return;
+          }
+          mediaRecoveries += 1;
+          hls.recoverMediaError();
+        };
+        hlsRecoverRef.current = recoverMedia;
+
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          manifestParsed = true;
+          play();
+        });
+        hls.on(Hls.Events.FRAG_BUFFERED, () => {
+          networkRetries = 0;
+        });
+        hls.on(Hls.Events.ERROR, (_evt, data) => {
+          if (!data.fatal) return;
+          if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+            recoverMedia();
+          } else if (
+            // startLoad() can't help before the manifest loads -- there's
+            // nothing to resume loading -- so that goes straight to the iframe.
+            data.type === Hls.ErrorTypes.NETWORK_ERROR &&
+            manifestParsed &&
+            networkRetries < MAX_NETWORK_RETRIES
+          ) {
+            networkRetries += 1;
+            hls.startLoad();
+          } else {
+            fallbackToIframe();
+          }
+        });
+
+        hls.loadSource(stream.url);
+        hls.attachMedia(video);
+      })
+      .catch(() => {
+        if (!cancelled) fallbackToIframe();
+      });
+
+    return () => {
+      cancelled = true;
+      video.removeEventListener('loadedmetadata', onNativeMetadata);
+      hlsRecoverRef.current = null;
+      hls?.destroy();
+    };
+  }, [playerMode, streams, activeStreamIdx, fallbackToIframe, viewkey, rawDuration]);
+
+  // hls.js only logs errors raised on the <video> element itself, so a decode
+  // error there has to be routed into its recovery by hand; falling straight
+  // back to the iframe would pre-empt a recoverable error. Without hls.js
+  // (native src) there's nothing to recover.
+  const handleVideoError = useCallback(() => {
+    if (hlsRecoverRef.current) hlsRecoverRef.current();
+    else fallbackToIframe();
+  }, [fallbackToIframe]);
 
   // Throttled position saving while playing (~every 5s), plus a flush on pause.
   const flushPosition = useCallback(() => {
@@ -197,37 +313,22 @@ export default function PlayerPanel() {
   }, [playNext, currentVideo, updatePlaybackPosition]);
 
   const handleQualitySelect = useCallback((idx) => {
-    if (videoRef.current && currentVideo) {
-      const currentTime = videoRef.current.currentTime;
-      const wasPaused = videoRef.current.paused;
-      const targetViewkey = currentVideo.viewkey;
-
-      // A previous quality switch (or video change) may still have a pending
-      // reseek queued — cancel it so it can't fire after this one.
-      clearPendingQualitySwitch();
-
-      setActiveStream(idx);
-
-      // Wait for next render to set new src, then restore position
-      const timeoutId = setTimeout(() => {
-        const video = videoRef.current;
-        // Bail if the video changed during this 50ms window. Read the store
-        // directly (not the `currentVideo` closed over above, which is
-        // frozen to click-time) so this actually reflects what's live now.
-        if (!video || useVideoStore.getState().currentVideo?.viewkey !== targetViewkey) return;
-
-        const onMeta = () => {
-          video.currentTime = currentTime;
-          if (!wasPaused) video.play();
-          qualitySwitchRef.current = null;
-        };
-        video.addEventListener('loadedmetadata', onMeta, { once: true });
-        qualitySwitchRef.current = { timeoutId: null, video, listener: onMeta };
-      }, 50);
-      qualitySwitchRef.current = { timeoutId, video: null, listener: null };
-    }
     setShowQualityMenu(false);
-  }, [setActiveStream, currentVideo, clearPendingQualitySwitch]);
+    // Re-selecting the active quality doesn't re-run the load effect, so a
+    // resume point queued here would linger and hijack the next reload.
+    if (idx === activeStreamIdx) return;
+    const video = videoRef.current;
+    if (video && currentVideo) {
+      // Hand the resume point to the load effect, which rebuilds the player
+      // for the new stream and starts it from there.
+      pendingSeekRef.current = {
+        viewkey: currentVideo.viewkey,
+        currentTime: video.currentTime,
+        wasPaused: video.paused,
+      };
+      setActiveStream(idx);
+    }
+  }, [setActiveStream, currentVideo, activeStreamIdx]);
 
   // No video selected
   if (!currentVideo) {
@@ -267,11 +368,10 @@ export default function PlayerPanel() {
           ref={videoRef}
           id="native-player"
           controls
-          autoPlay
           onEnded={handleEnded}
           onPause={flushPosition}
           onTimeUpdate={handleTimeUpdate}
-          onError={fallbackToIframe}
+          onError={handleVideoError}
           style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000' }}
         />
 
